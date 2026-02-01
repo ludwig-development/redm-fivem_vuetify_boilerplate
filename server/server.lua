@@ -1,0 +1,6 @@
+RegisterNetEvent("myRessourceName:myEventName")
+AddEventHandler("myRessourceName:myEventName", function(source, data)
+    local message = "Wow, the nui -> Server Router works ! I am source " .. tostring(source)
+    Print(message)
+    UserNotification(message, "success", 4000, source)
+end)
