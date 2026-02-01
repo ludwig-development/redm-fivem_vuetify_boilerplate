@@ -8,14 +8,14 @@
 
 <p align="center">
     <img alt="GitHub package.json version" src="https://img.shields.io/github/package-json/v/ludwig-development/redm-fivem_vuetify_boilerplate?filename=frontend%2Fpackage.json">
-    <img alt="GitHub" src="https://img.shields.io/github/license/ludwig-development/redm-fivem_vuetify_boilerplate">
+    <img alt="GitHub" src="https://img.shields.io/github/license/ludwig-development/redm-fivem_vuetify_boilerplate?v=1">
     <img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/ludwig-development/redm-fivem_vuetify_boilerplate">
     <img alt="Maintenance" src="https://img.shields.io/maintenance/yes/2026">
 </p>
 
 <p align="center">
-    <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/ludwig-development/redm-fivem_vuetify_boilerplate?style=social">
-    <img alt="GitHub forks" src="https://img.shields.io/github/forks/ludwig-development/redm-fivem_vuetify_boilerplate?style=social">
+    <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/ludwig-development/redm-fivem_vuetify_boilerplate?style=social?v=1">
+    <img alt="GitHub forks" src="https://img.shields.io/github/forks/ludwig-development/redm-fivem_vuetify_boilerplate?style=social?v=1">
     <a href="https://www.paypal.com/paypalme/LudwigRahm">
         <img src="https://img.shields.io/badge/Donate-PayPal-blue.svg?style=social&logo=paypal" alt="Donate with PayPal">
     </a>
@@ -117,3 +117,4 @@ after building and starting the resource go ingame and execute the command "open
         <img src="https://i.imgur.com/6cnwpHe.jpeg" alt="REDM FIVEM VUETIFY BOILERPLATE BY LUDWIG"/>
     </a>
 </p>
+
