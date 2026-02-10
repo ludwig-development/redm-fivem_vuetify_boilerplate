@@ -37,6 +37,7 @@
 - **Global State Management:** Powered by **Pinia** to keep your UI data synced across components.
 - **Advanced Snackbar System:** \* Shorthand helpers (`info`, `success`, `error`).
   - Automatic message queueing & custom timeouts.
+- **Localization Support:** Native Localization for your Lua and Frontend code referring to the same Lua Table.
 - **📡 NUI ↔ Server Bridge:** Built-in `postNUI` utility with a dedicated **ServerRouter** to handle events from UI to Client / Server-Lua effortlessly.
 
 ### 🛠 Advanced Printing System
@@ -117,7 +118,3 @@ after building and starting the resource go ingame and execute the command "open
         <img src="https://i.imgur.com/6cnwpHe.jpeg" alt="REDM FIVEM VUETIFY BOILERPLATE BY LUDWIG"/>
     </a>
 </p>
-
-
-
-
