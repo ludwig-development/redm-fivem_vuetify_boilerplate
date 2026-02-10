@@ -6,10 +6,13 @@
       </div>
 
       <div class="mb-8 text-center">
-        <div class="text-body-2 font-weight-light mb-n1">Welcome to</div>
-        <h1 class="text-h2 my-0 font-weight-bold">Vuetify Boilerplate by Ludwig Development!</h1>
+        <div class="text-body-2 font-weight-light mb-n1">
+          {{ lang.t('welcome', formattedDate, lang.locale) }}
+          <!-- see how formattedDate is automaticly being joined just like "string.format" in lua -->
+        </div>
+        <h1 class="text-h2 my-0 font-weight-bold">{{ lang.t('boilerplate_title') }}</h1>
         <h1 class="text-h3 my-0" :class="store.getValue('header') ? 'text-primary' : 'text-white'">
-          {{ store.getValue('header') || 'I haven\'t pressed the Event button yet!' }}
+          {{ store.getValue('header') || lang.t('no_event_header') }}
         </h1>
       </div>
 
@@ -23,15 +26,15 @@
             </template>
 
             <template #title>
-              <h2 class="text-h5 font-weight-bold">Get started</h2>
+              <h2 class="text-h5 font-weight-bold">{{ lang.t('get_started') }}</h2>
             </template>
 
             <template #subtitle>
               <div class="text-subtitle-1">
-                Change this page by updating <v-kbd>{{ `
+                {{ lang.t('update_instruction') }} <v-kbd>{{ `
                   <HelloWorld />` }}
                 </v-kbd>
-                in <v-kbd>components/HelloWorld.vue</v-kbd>.
+                {{ lang.t('update_path') }}
               </div>
             </template>
           </v-card>
@@ -39,17 +42,17 @@
 
         <v-col v-for="link in links" :key="link.title" cols="6">
           <v-card append-icon="$next" class="py-4" color="surface-variant" :prepend-icon="link.icon" rounded="lg"
-            :text="link.text" :title="link.title" variant="elevated" @click="link.action" />
+            :text="lang.t(link.textKey)" :title="lang.t(link.titleKey)" variant="elevated" @click="link.action" />
         </v-col>
 
         <v-col cols="12">
           <v-alert v-if="store.getValue('status')" type="info" class="mb-4">
-            Current Status: {{ store.getValue('status') }}
+            {{ lang.t('current_status') }} {{ store.getValue('status') }}
           </v-alert>
 
-          <v-text-field label="Type something to store it dynamically" v-model="tempInput" />
+          <v-text-field :label="lang.t('input_label')" v-model="tempInput" />
 
-          <v-btn color="primary" @click="testGeneralStore">Save to Store</v-btn>
+          <v-btn color="primary" @click="testGeneralStore">{{ lang.t('save_btn') }}</v-btn>
         </v-col>
       </v-row>
     </div>
@@ -57,70 +60,80 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'; // Ensure ref is imported
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import { useSnackbarStore } from '@/stores/snackbar';
+import { useLangStore } from '@/stores/langStore';
 import { postNUI } from '@/utils/nui';
 
 const store = useGlobalStore()
 const snackbar = useSnackbarStore();
+const lang = useLangStore();
 
 const tempInput = ref('');
 
 const testSnackbar = function () {
-  snackbar.info("This is an info message");
-
-  snackbar.success("This was successful!", 8000);
+  snackbar.info(lang.t('sb_info_msg'));
+  snackbar.success(lang.t('sb_success_msg'), 8000);
 
   snackbar.showSnackbar({
-    text: "Manually triggered with custom config",
-    color: "secondary", // Or any Vuetify color like "warning" or "red-darken-3" see colors at https://vuetifyjs.com/en/styles/colors/#material-colors
+    text: lang.t('sb_manual_msg'),
+    color: "secondary",
     timeout: 2000
   });
 
-  snackbar.warning("Queue test 1");
-  snackbar.error("Queue test 2");
+  snackbar.warning(lang.t('sb_queue_1'));
+  snackbar.error(lang.t('sb_queue_2'));
 };
 
 const testServerRouter = async () => {
-  await postNUI('ServerRouter', { event: 'myRessourceName:myEventName', data: { data1: "Provided By Ludwig Development", data2: "your Testdate" } });
+  await postNUI('ServerRouter', {
+    event: 'myRessourceName:myEventName',
+    data: { data1: "Provided By Ludwig Development", data2: "your Testdate" }
+  });
 };
 
 const changeTheTitle = async () => {
   await postNUI('setHeadder');
-  // Feedback from Post is now handled in a central function with handlers in the File App.vue !
 };
 
 const testGeneralStore = () => {
-  store.setValue('status', tempInput.value || "Make an Input below and press again!")
+  store.setValue('status', tempInput.value || lang.t('store_fallback'))
   store.setValue('lastUpdated', new Date().toLocaleTimeString())
-
   console.log(store.data)
 }
 
 const links = [
   {
-    icon: '$info', //these icon aliases are defined in plugins/myIcons.ts look there if you want to define new once
-    text: 'Style your snackbar in components/snackbar.vue',
-    title: 'Test Snackbar',
+    icon: '$info',
+    textKey: 'link_sb_text',
+    titleKey: 'link_sb_title',
     action: testSnackbar
   },
   {
     icon: '$marker',
-    text: 'Test the Serverrouter, view your Serverconsole for detailed information',
-    title: 'NUI -> Serverrouter',
+    textKey: 'link_nui_text',
+    titleKey: 'link_nui_title',
     action: testServerRouter
   },
   {
     icon: '$upload',
-    text: 'See how the Globalstore stores your input below!',
-    title: 'Global Storage',
+    textKey: 'link_store_text',
+    titleKey: 'link_store_title',
     action: testGeneralStore
   },
   {
     icon: '$loading',
-    text: 'Change the Header of the Script to see the Events in Action',
-    title: 'Events in Action',
+    textKey: 'link_event_text',
+    titleKey: 'link_event_title',
     action: changeTheTitle
   }
-] 
+]
+
+const formattedDate = computed(() => {
+  return new Intl.DateTimeFormat(lang.locale, {
+    dateStyle: 'short',
+    timeStyle: 'short'
+  }).format(new Date())
+})
 </script>

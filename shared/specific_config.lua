@@ -3,6 +3,7 @@ In the shared Folder you may now make as many .lua files as you want defining pr
 Make sure to split ServerConfig from Client Config for Security Reasons if you store something
 like Discord Webhooks or credentials for external APIs
 ]]
+Config.Language = "de" -- "de" is also available for preview, you can add as much languages as you like
 
 Config.myHeaders = {
     "I am controlling the Boilerplate!",

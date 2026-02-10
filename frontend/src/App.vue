@@ -12,11 +12,12 @@ import Snackbar from './components/Snackbar.vue';
 import { useGlobalStore } from '@/stores/useGlobalStore'
 import { useRouter } from 'vue-router';
 import { useSnackbarStore } from '@/stores/snackbar';
-
+import { useLangStore } from '@/stores/langStore'
 
 const router = useRouter();
 const store = useGlobalStore()
 const snackbar = useSnackbarStore();
+const lang = useLangStore();
 const isVisible = ref(false);
 
 
@@ -38,6 +39,7 @@ const openUi = async (view = "") => {
 };
 
 const handlers = {
+  // utility functions, dont change just remove if not needed:
   openUi: (itemData) => {
     if (itemData.payload?.length > 0 && itemData.payload[0]) {
       openUi(itemData.payload[0]);
@@ -50,10 +52,19 @@ const handlers = {
       snackbar.showSnackbar(itemData.data);
     }
   },
+  setLang: (itemData) => {
+    console.log("setting Data, step1");
+    if (itemData.lang && itemData.table) {
+      console.log("setting Data, step2");
+      lang.setLangData(itemData)
+    }
+  },
+  // your specific functions: 
   setHeader: (itemData) => {
     console.log("Now the Data was set: ", itemData.data)
     store.setValue("header", itemData.data)
-  }
+  },
+
 };
 
 const handleMessageListener = (event) => {
