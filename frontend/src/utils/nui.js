@@ -24,3 +24,32 @@ export async function postNUI(eventName, data = {}) {
     return null;
   }
 }
+
+
+/**
+ * Targets the centralized Server Router
+ * @param {string} theModule - e.g., 'itemManager'
+ * @param {string} action - e.g., 'AddItems' or 'view'
+ * @param {object} payload - Any data the server might need, optional
+ */
+export async function triggerServerAction(action, payload = {}) {
+  return await postNUI('ServerRouter', {
+    action: action,
+    data: payload
+  });
+}
+
+/**
+ * Requests data from the server and waits for a response.
+ * @param {string} action - The action name.
+ * @param {object} payload - Any data the server might need, optional
+ * @returns {Promise<any>} - The data returned from the server.
+ */
+export async function requestServerData(action, payload = {}) {
+  const result = await postNUI('ServerCallbackRouter', {
+    action: action,
+    data: payload
+  });
+
+  return result;
+}

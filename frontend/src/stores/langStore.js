@@ -18,15 +18,17 @@ export const useLangStore = defineStore('lang', {
 
     getters: {
         t: (state) => (key, ...args) => {
-            let text = state.table[key] ?? key
+            const keys = key.split('.');
+            let text = keys.reduce((obj, i) => obj?.[i], state.table) ?? key;
 
-            let i = 0
-            text = text.replace(/%[sd]/g, () => {
-                const value = args[i++]
-                return value !== undefined ? value : ''
-            })
-
-            return text
+            if (typeof text === 'string') {
+                let i = 0;
+                return text.replace(/%[sd]/g, () => {
+                    const value = args[i++];
+                    return value !== undefined ? value : '';
+                });
+            }
+            return text;
         }
     },
 
