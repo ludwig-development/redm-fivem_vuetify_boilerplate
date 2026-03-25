@@ -2,7 +2,7 @@
   <v-container class="fill-height fill-width d-flex align-center bg-black" max-width="900">
     <div>
       <div class="d-flex flex-column align-center w-100">
-        <v-img class="mb-4" height="150" width="150" src="@/assets/logo.webp" rounded="circle" cover />
+        <v-img class="mb-4" height="150" width="150" src="@/assets/ld_avatar_big.png" rounded="circle" cover />
       </div>
 
       <div class="mb-8 text-center">
