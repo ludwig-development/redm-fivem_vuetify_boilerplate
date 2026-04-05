@@ -1,8 +1,3 @@
---[[
-Special Thanks to Roschy (https://github.com/JulianLegler) for Providing the Code for this Debug System.
- Without him i wouldn´t  understand half of what i know now and this Project wouldn´t be possible
-]]
-
 function DebugPrint(...)
     if not Config.Debug then
         return
@@ -53,5 +48,9 @@ function Print(...)
 end
 
 function WarnPrint(...)
+    Print(3, "^3" .. ... .. " ^0")
+end
+
+function ErrorPrint(...)
     Print(3, "^1" .. ... .. " ^0")
 end
