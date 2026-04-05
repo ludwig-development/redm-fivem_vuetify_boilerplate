@@ -16,9 +16,6 @@
 <p align="center">
 <img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/ludwig-development/redm-fivem_vuetify_boilerplate?style=social&cacheSeconds=3600">
     <img alt="GitHub forks" src="https://img.shields.io/github/forks/ludwig-development/redm-fivem_vuetify_boilerplate?style=social&cacheSeconds=3600">
-    <a href="https://www.paypal.com/paypalme/LudwigRahm">
-        <img src="https://img.shields.io/badge/Donate-PayPal-blue.svg?style=social&logo=paypal" alt="Donate with PayPal">
-    </a>
 </p>
 
 <hr>
@@ -95,11 +92,6 @@ Comprehensive examples for the NUI bridge and Printing system can be found withi
 ## Feedback
 
 Im always on the hunt for an even better startingpoint, if you have suggestions open a pullrequest or contact me via Discord !
-
-## ☕ Support
-
-If this boilerplate saved you time or helped your project, consider gifting me a coffee!
-**[Donate via PayPal](https://www.paypal.com/paypalme/LudwigRahm)**
 
 ---
 
