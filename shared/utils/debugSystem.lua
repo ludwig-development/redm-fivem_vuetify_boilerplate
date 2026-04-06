@@ -53,5 +53,44 @@ function Print(...)
 end
 
 function WarnPrint(...)
+    Print(3, "^3" .. ... .. " ^0")
+end
+
+function ErrorPrint(...)
     Print(3, "^1" .. ... .. " ^0")
+end
+
+function JsonPrint(table)
+    Print(3, json.encode(table, { indent = true }))
+end
+
+local function dump(o, depth)
+    depth = depth or 0
+    local spacing = string.rep("  ", depth)
+
+    if type(o) == 'table' then
+        if depth > 10 then return "{ ... High Depth ... }" end
+
+        local s = '{\n'
+        local foundData = false
+
+        for k, v in pairs(o) do
+            if type(v) ~= 'function' then
+                foundData = true
+                local key = (type(k) ~= 'number') and '"' .. k .. '"' or k
+                s = s .. spacing .. "  [" .. key .. "] = " .. dump(v, depth + 1) .. ",\n"
+            end
+        end
+
+        if not foundData then return "{ }" end
+        return s .. spacing .. '}'
+    elseif type(o) == 'string' then
+        return '"' .. o .. '"'
+    else
+        return tostring(o)
+    end
+end
+
+function ObjectPrint(object)
+    Print(dump(object))
 end

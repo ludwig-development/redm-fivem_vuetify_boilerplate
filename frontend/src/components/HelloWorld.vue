@@ -88,7 +88,7 @@ const testSnackbar = function () {
 
 const testServerRouter = async () => {
   await postNUI('ServerRouter', {
-    event: 'myRessourceName:myEventName',
+    action: 'myRessourceName:myEventName',
     data: { data1: "Provided By Ludwig Development", data2: "your Testdate" }
   });
 };

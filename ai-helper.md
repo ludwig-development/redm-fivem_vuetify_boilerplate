@@ -1,143 +1,7 @@
 # AI Helper — RedM/FiveM Vuetify Boilerplate
+
 > Technical Reference for AI Coding Assistants
 > Based on actual source code — do not guess or generalize.
-
----
-
-## Known Bugs In The Boilerplate Source Code
-
-> Read this section first. These are real defects found by cross-referencing every file. They will cause runtime crashes or silent failures if not fixed before use.
-
-### BUG 1 — `JsonPrint` is undefined (runtime crash)
-
-**Files:** `server/nuiRouter.lua` lines 62 and 108
-
-```lua
-JsonPrint(data)    -- line 62, inside event router success path
-JsonPrint(result)  -- line 108, inside callback router success path
-```
-
-`JsonPrint` is called but **never defined anywhere in the codebase** — not in `shared/debugSystem.lua`, not in `shared/utils/debugSystem.lua`, not anywhere. Every successful event dispatch and every successful callback will crash at this line with `attempt to call a nil value (global 'JsonPrint')`.
-
-**Fix:** Add to `shared/debugSystem.lua`:
-```lua
-function JsonPrint(data)
-    DebugPrint(json.encode(data))
-end
-```
-
-Or replace the two calls in `nuiRouter.lua` with `DebugPrint(json.encode(data))` and `DebugPrint(json.encode(result))`.
-
----
-
-### BUG 2 — `src` used instead of `source` in callback router (runtime crash)
-
-**File:** `server/nuiRouter.lua` line 83
-
-```lua
-lib.callback.register(callbackRouterName, function(source, action, data)
-    -- ...
-    if not isAllowed(key) then
-        WarnPrint("[Router] Blocked unauthorized callback: " .. key .. " Triggering Player: " .. GetPlayerName(src))
-        --                                                                                                      ^^^
-        --  'src' does not exist in this scope. The parameter is named 'source'.
-        --  This crashes whenever an allowlist-blocked callback is attempted.
-    end
-```
-
-The event router (lines 39–71) defines `local src = source` so `src` is valid there. The callback router (lines 75–111) uses the parameter name `source` and never defines `src`. Using `GetPlayerName(src)` where `src` is nil will crash.
-
-**Fix:** Replace `GetPlayerName(src)` on line 83 with `GetPlayerName(source)`.
-
----
-
-### BUG 3 — Demo button in `HelloWorld.vue` sends wrong field name (silent failure)
-
-**File:** `frontend/src/components/HelloWorld.vue` lines 89–94
-
-```js
-const testServerRouter = async () => {
-  await postNUI('ServerRouter', {
-    event: 'myRessourceName:myEventName',  // BUG: field is 'event', not 'action'
-    data: { data1: "...", data2: "..." }
-  });
-};
-```
-
-The `ServerRouter` NUI callback in Lua checks `data.action`:
-```lua
-if data and data.action then
-    TriggerServerEvent(eventName, data.action, data.data or {})
-end
-```
-
-Since `data.action` is nil (the field is named `event`), `TriggerServerEvent` is never called. The callback returns `{ success = true }` immediately without doing anything on the server. The "NUI → ServerRouter" card in the boilerplate UI **does not actually work**.
-
-**Fix:** Change `event:` to `action:`:
-```js
-await postNUI('ServerRouter', {
-  action: 'myEventName',
-  data: { data1: "...", data2: "..." }
-});
-```
-
----
-
-### BUG 4 — `server/server.lua` demo uses wrong registration pattern (unreachable code)
-
-**File:** `server/server.lua`
-
-```lua
-RegisterNetEvent("myRessourceName:myEventName")
-AddEventHandler("myRessourceName:myEventName", function(source, data)
-    ...
-end)
-```
-
-The router (`nuiRouter.lua`) dispatches events to `EventLogic[action]` — it does NOT fire `TriggerServerEvent("myRessourceName:myEventName", ...)`. It fires `TriggerServerEvent("{resourceName}:serverRouter", action, data)` and then internally calls the function stored in `EventLogic[action]`.
-
-The `AddEventHandler("myRessourceName:myEventName", ...)` in `server.lua` is **never triggered by the router**. It would only be reached by a direct `TriggerServerEvent("myRessourceName:myEventName", ...)` call from somewhere else.
-
-**Fix:** Replace with the `EventLogic` table pattern:
-```lua
-EventLogic["myEventName"] = function(src, data)
-    local message = "Router works! Source: " .. tostring(src)
-    Print(message)
-    UserNotification(message, "success", 4000, src)
-end
-```
-
-And ensure `"myEventName"` is in `AllowedFunctions` in `nuiRouter.lua` (it already is).
-
----
-
-### BUG 5 — `WarnPrint` and `ErrorPrint` only accept a single string argument
-
-**Files:** `shared/debugSystem.lua` and `shared/utils/debugSystem.lua`
-
-```lua
-function WarnPrint(...)
-    Print(3, "^3" .. ... .. " ^0")
-end
-```
-
-The expression `"^3" .. ... .. " ^0"` uses `...` (varargs) inside string concatenation. In Lua, when varargs appear in an expression context (not as the last argument), only the **first value** is used. Additional arguments are silently dropped. Passing a non-string crashes.
-
-**Correct usage (single string only):**
-```lua
-WarnPrint("[Router] Something went wrong: " .. tostring(key))  -- OK
-WarnPrint("part1", "part2")  -- WRONG: "part2" is silently dropped
-WarnPrint(someTable)         -- CRASH: cannot concat table
-```
-
-**Safe pattern when you need to concatenate:**
-```lua
-WarnPrint(string.format("[Router] Key: %s Value: %s", key, tostring(value)))
-```
-
-The same limitation applies to `ErrorPrint` in `shared/debugSystem.lua`.
-
----
 
 ---
 
@@ -190,18 +54,18 @@ The UI never talks directly to the server. **All UI → Server communication goe
 
 ### Supported Systems
 
-| System | Technology | Location |
-|--------|-----------|----------|
-| UI Framework | Vue 3 + Vuetify 3 | `frontend/src/` |
-| State Management | Pinia | `frontend/src/stores/` |
-| NUI Communication | fetch POST (HTTP) + window.message | `frontend/src/utils/nui.js` + `App.vue` |
-| Lua Client | Standard FiveM/RedM Lua | `client/` |
-| Lua Server | Standard FiveM/RedM Lua | `server/` |
-| Shared Logic | Loaded on both client and server | `shared/` |
-| Translation | Lua `L` table → Vue `langStore` | `lang/` + `stores/langStore.js` |
-| Notifications | `UserNotification()` → NUI snackbar | `shared/userNotification.lua` + `Snackbar.vue` |
-| Debug | `DebugPrint()` / `Print()` / `WarnPrint()` | `shared/debugSystem.lua` |
-| Dependency | ox_lib (for `lib.callback`) | External |
+| System            | Technology                                 | Location                                       |
+| ----------------- | ------------------------------------------ | ---------------------------------------------- |
+| UI Framework      | Vue 3 + Vuetify 3                          | `frontend/src/`                                |
+| State Management  | Pinia                                      | `frontend/src/stores/`                         |
+| NUI Communication | fetch POST (HTTP) + window.message         | `frontend/src/utils/nui.js` + `App.vue`        |
+| Lua Client        | Standard FiveM/RedM Lua                    | `client/`                                      |
+| Lua Server        | Standard FiveM/RedM Lua                    | `server/`                                      |
+| Shared Logic      | Loaded on both client and server           | `shared/`                                      |
+| Translation       | Lua `L` table → Vue `langStore`            | `lang/` + `stores/langStore.js`                |
+| Notifications     | `UserNotification()` → NUI snackbar        | `shared/userNotification.lua` + `Snackbar.vue` |
+| Debug             | `DebugPrint()` / `Print()` / `WarnPrint()` | `shared/debugSystem.lua`                       |
+| Dependency        | ox_lib (for `lib.callback`)                | External                                       |
 
 ### How UI and Lua Communicate
 
@@ -319,11 +183,11 @@ It exists for **one critical reason**: FiveM/RedM loads shared script files in a
 
 ### Config Values (all defined in `shared/specific_config.lua`)
 
-| Key | Type | Default | Purpose |
-|-----|------|---------|---------|
-| `Config.Debug` | boolean | `true` | Enables `DebugPrint()` output |
-| `Config.Language` | string | `"de"` | Selects the active language (`"en"` or `"de"` or any added language) |
-| `Config.myHeaders` | table (array of strings) | 18 strings | Example array used by client event demo |
+| Key                | Type                     | Default    | Purpose                                                              |
+| ------------------ | ------------------------ | ---------- | -------------------------------------------------------------------- |
+| `Config.Debug`     | boolean                  | `true`     | Enables `DebugPrint()` output                                        |
+| `Config.Language`  | string                   | `"de"`     | Selects the active language (`"en"` or `"de"` or any added language) |
+| `Config.myHeaders` | table (array of strings) | 18 strings | Example array used by client event demo                              |
 
 ### How Configuration Is Accessed
 
@@ -368,14 +232,17 @@ local display = false  -- tracks current UI visibility state
 #### Functions
 
 **`SendHeaderToApp(value)`** — Public function. Sends a `setHeader` action to the Vue frontend:
+
 ```lua
 function SendHeaderToApp(value)
     SendNUIMessage { action = 'setHeader', data = value }
 end
 ```
+
 The frontend handler in `App.vue` catches `setHeader` and calls `store.setValue("header", value)`.
 
 **`sendLanguageToApp()`** — Private function. Sends the Lua language table to the Vue frontend:
+
 ```lua
 local function sendLanguageToApp()
     SendNUIMessage({
@@ -385,9 +252,11 @@ local function sendLanguageToApp()
     })
 end
 ```
+
 This sends the entire `L` table (the loaded language table from `lang/`) plus the language code to Vue, where `langStore` picks it up.
 
 **`SetDisplay(bool, view)`** — Public function. Opens or closes the NUI panel:
+
 ```lua
 function SetDisplay(bool, view)
     Print "setting display"
@@ -400,6 +269,7 @@ function SetDisplay(bool, view)
     SetNuiFocus(bool, bool)
 end
 ```
+
 - `bool = true` → show UI, give NUI focus and cursor
 - `bool = false` → hide UI, release NUI focus
 - `view` is an optional string that routes the Vue app to a specific page (matched in `App.vue`'s `openUi` switch)
@@ -407,6 +277,7 @@ end
 #### NUI Callbacks Registered
 
 **`closeUi`** — Called by the Vue frontend (e.g., Escape key press):
+
 ```lua
 RegisterNUICallback('closeUi', function()
     SetDisplay(false)
@@ -414,6 +285,7 @@ end)
 ```
 
 **`setHeadder`** (note: intentional typo in the original code, do not fix it) — Called by Vue to request a new random header:
+
 ```lua
 RegisterNUICallback('setHeadder', function(data)
     Print("i have received the Data: " .. json.encode(data))
@@ -426,12 +298,14 @@ end)
 #### Commands Registered
 
 **`openview`** — Console/chat command to toggle the UI:
+
 ```lua
 RegisterCommand("openview", function()
     sendLanguageToApp()
     SetDisplay(not display)
 end, false)
 ```
+
 The `false` parameter means the command is not restricted to admins.
 
 ---
@@ -443,6 +317,7 @@ The `false` parameter means the command is not restricted to admins.
 #### How It Works
 
 The file constructs its event names dynamically:
+
 ```lua
 local eventName = tostring(GetCurrentResourceName()) .. ":serverRouter"
 local resourceName = GetCurrentResourceName()
@@ -513,6 +388,7 @@ end)
 ```
 
 **Data mapping:**
+
 - `message` (string) → `payload.text` → displayed as snackbar text
 - `action` (string) → `payload.color` → Vuetify color (`"success"`, `"error"`, `"info"`, `"warning"`)
 - `time` (number, milliseconds) → `payload.timeout` → auto-dismiss duration
@@ -527,6 +403,7 @@ TriggerEvent(GetCurrentResourceName() .. ":SendUserMessage", "Hello!", "success"
 ```
 
 Or more cleanly, use `UserNotification()` from shared (it handles routing):
+
 ```lua
 UserNotification("Hello!", "success", 4000)
 -- Note: no source argument → fires local client event
@@ -577,12 +454,14 @@ end
 #### Architecture
 
 The router uses two global tables declared at the top:
+
 ```lua
 EventLogic = EventLogic or {}
 CallbackLogic = CallbackLogic or {}
 ```
 
 These tables are global so that **any server file** can add handlers to them:
+
 ```lua
 -- In any server file:
 EventLogic["myEventName"] = function(src, data) ... end
@@ -650,6 +529,7 @@ Dispatches to `CallbackLogic[action](source, data)` and returns the result. The 
 #### Register a New Server Event Handler
 
 **Step 1:** Add to allowlist in `nuiRouter.lua`:
+
 ```lua
 local AllowedFunctions = {
     ["myEventName"] = true,
@@ -658,6 +538,7 @@ local AllowedFunctions = {
 ```
 
 **Step 2:** Add logic in `server/server.lua` (or any server file loaded after `nuiRouter.lua`):
+
 ```lua
 EventLogic["myNewAction"] = function(src, data)
     Print("Received myNewAction from " .. tostring(src))
@@ -670,6 +551,7 @@ end
 #### Register a New Server Callback Handler
 
 **Step 1:** Add to allowlist:
+
 ```lua
 local AllowedFunctions = {
     ["myCallbackName"] = true,
@@ -678,6 +560,7 @@ local AllowedFunctions = {
 ```
 
 **Step 2:** Add logic:
+
 ```lua
 CallbackLogic["getPlayerInventory"] = function(src, data)
     local items = { "water", "bread" }  -- fetch real data
@@ -701,17 +584,18 @@ Shared scripts are loaded on **both client and server**. Do not put server-only 
 
 **Differences between the two files:**
 
-| Feature | `shared/debugSystem.lua` (root) | `shared/utils/debugSystem.lua` |
-|---------|---------------------------------|-------------------------------|
-| Line endings | CRLF | LF |
-| `WarnPrint` color code | `^3` (yellow) | `^1` (red) |
-| `ErrorPrint` defined | Yes (`^1` red) | No |
-| `DebugPrint` | Identical | Identical |
-| `Print` | Identical | Identical |
+| Feature                | `shared/debugSystem.lua` (root) | `shared/utils/debugSystem.lua` |
+| ---------------------- | ------------------------------- | ------------------------------ |
+| Line endings           | CRLF                            | LF                             |
+| `WarnPrint` color code | `^3` (yellow)                   | `^1` (red)                     |
+| `ErrorPrint` defined   | Yes (`^1` red)                  | No                             |
+| `DebugPrint`           | Identical                       | Identical                      |
+| `Print`                | Identical                       | Identical                      |
 
 #### Available Functions
 
 **`Print(...)`** — Always prints, regardless of `Config.Debug`. Accepts multiple arguments; tables are JSON-encoded, booleans become `"true"`/`"false"`:
+
 ```lua
 Print("Player logged in")
 Print("Data received:", someTable)  -- tables are auto-encoded to JSON
@@ -719,17 +603,20 @@ Print("Flag:", someBool)            -- booleans print as "true"/"false"
 ```
 
 Output format:
+
 ```
 [resourceName] @resourceName/server/server.lua:12 (functionName) Player logged in
 ```
 
 **`DebugPrint(...)`** — Only prints when `Config.Debug == true`. Same argument handling as `Print`:
+
 ```lua
 DebugPrint("Entering callback for action: " .. action)
 DebugPrint(3, "...")  -- optional first-arg number = stack level offset
 ```
 
 **`WarnPrint(singleString)`** — Prints with color. **Accepts exactly one string argument** (see Bug 5 above). Color depends on which file loaded last (`^3` yellow or `^1` red):
+
 ```lua
 WarnPrint("[Router] Blocked event: " .. key)  -- single string concatenation is safe
 ```
@@ -741,6 +628,7 @@ WarnPrint("[Router] Blocked event: " .. key)  -- single string concatenation is 
 #### Stack Level Override
 
 All `Print`/`DebugPrint` calls accept an optional leading number as the first argument to adjust which stack frame is reported:
+
 ```lua
 DebugPrint(3, "This shows the caller's caller in the output")
 -- Level 2 = default (direct caller)
@@ -750,6 +638,7 @@ DebugPrint(3, "This shows the caller's caller in the output")
 #### Enabling/Disabling Debug
 
 In `initconfig.lua`:
+
 ```lua
 Config.Debug = true   -- enable DebugPrint output
 Config.Debug = false  -- disable (silences all DebugPrint calls; Print/WarnPrint/ErrorPrint are unaffected)
@@ -777,19 +666,21 @@ end
 
 **Parameters:**
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `message` | string | The text displayed in the snackbar |
-| `type` | string | Vuetify color: `"success"`, `"error"`, `"info"`, `"warning"` |
-| `time` | number | Milliseconds before auto-dismiss (e.g., `4000`) |
-| `source` | number or nil | Player server ID. If provided → sends to that client. If nil → fires local event (client-side only) |
+| Parameter | Type          | Description                                                                                         |
+| --------- | ------------- | --------------------------------------------------------------------------------------------------- |
+| `message` | string        | The text displayed in the snackbar                                                                  |
+| `type`    | string        | Vuetify color: `"success"`, `"error"`, `"info"`, `"warning"`                                        |
+| `time`    | number        | Milliseconds before auto-dismiss (e.g., `4000`)                                                     |
+| `source`  | number or nil | Player server ID. If provided → sends to that client. If nil → fires local event (client-side only) |
 
 **From server (send to specific player):**
+
 ```lua
 UserNotification("Item added!", "success", 4000, source)
 ```
 
 **From client (send to self):**
+
 ```lua
 UserNotification("Action completed!", "info", 3000)
 -- or equivalently:
@@ -809,11 +700,13 @@ end
 ```
 
 **Behavior:**
+
 1. Looks up `key` in `L` (the active language table, set by the lang file that matches `Config.Language`)
 2. Falls back to `DE` table (always loaded from `lang/de.lua`)
 3. Falls back to an error string `"Localisation missing ! Key:keyname"` if neither has the key
 
 **Usage:**
+
 ```lua
 local text = _L("welcome")         -- returns localized "Welcome!" string
 local title = _L("boilerplate_title")
@@ -864,6 +757,7 @@ end
 ```
 
 **Key differences:**
+
 - `DE` is always set (used as fallback in `_L()`)
 - If `Config.Language == "de"`, `L = DE` so `_L()` works via the primary `L` table
 - The `L = L or {}` guard prevents overwriting a previously set `L`
@@ -889,6 +783,7 @@ Both language files are in `shared_scripts` (loaded by both client and server). 
 ### How to Add a New Language
 
 **Step 1:** Create `lang/fr.lua`:
+
 ```lua
 L = L or {}
 
@@ -905,11 +800,13 @@ end
 ```
 
 **Step 2:** Add to `shared/specific_config.lua`:
+
 ```lua
 Config.Language = "fr"
 ```
 
 **Step 3:** Add the locale to `langStore.js` in `LOCALE_MAP`:
+
 ```js
 const LOCALE_MAP = {
     de: 'de-DE',
@@ -923,6 +820,7 @@ const LOCALE_MAP = {
 ### How to Add a New Translation Key
 
 **Step 1:** Add to `lang/en.lua`:
+
 ```lua
 L = {
     -- existing keys...
@@ -931,6 +829,7 @@ L = {
 ```
 
 **Step 2:** Add same key to `lang/de.lua`:
+
 ```lua
 DE = {
     -- existing keys...
@@ -951,17 +850,18 @@ DE = {
 **File:** `frontend/src/main.ts`
 
 ```ts
-import { registerPlugins } from '@/plugins'
-import App from './App.vue'
-import { createApp } from 'vue'
-import 'unfonts.css'
+import { registerPlugins } from "@/plugins";
+import App from "./App.vue";
+import { createApp } from "vue";
+import "unfonts.css";
 
-const app = createApp(App)
-registerPlugins(app)
-app.mount('#app')
+const app = createApp(App);
+registerPlugins(app);
+app.mount("#app");
 ```
 
 Startup sequence:
+
 1. Create Vue 3 app from `App.vue`
 2. `registerPlugins(app)` registers Vuetify, Vue Router, and Pinia
 3. Mount to `#app` in `index.html`
@@ -973,15 +873,12 @@ Startup sequence:
 **File:** `frontend/src/plugins/index.ts`
 
 ```ts
-import vuetify from './vuetify'
-import pinia from '../stores'
-import router from '../router'
+import vuetify from "./vuetify";
+import pinia from "../stores";
+import router from "../router";
 
 export function registerPlugins(app: App) {
-  app
-    .use(vuetify)
-    .use(router)
-    .use(pinia)
+  app.use(vuetify).use(router).use(pinia);
 }
 ```
 
@@ -994,23 +891,25 @@ All three plugins are registered in a single call chain.
 **File:** `frontend/src/router/index.ts`
 
 ```ts
-import { createRouter, createWebHashHistory } from 'vue-router'
-import { setupLayouts } from 'virtual:generated-layouts'
-import { routes } from 'vue-router/auto-routes'
+import { createRouter, createWebHashHistory } from "vue-router";
+import { setupLayouts } from "virtual:generated-layouts";
+import { routes } from "vue-router/auto-routes";
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes: setupLayouts(routes),
-})
+});
 ```
 
 **Key facts:**
+
 - Uses **hash history** (`createWebHashHistory`) — required for NUI file:// serving
 - Routes are **auto-generated** from `frontend/src/pages/` using `unplugin-vue-router`
 - Layouts are **auto-applied** via `vite-plugin-vue-layouts-next`
 - **No manual route registration is needed** — just create a `.vue` file in `pages/`
 
 **File → Route mapping:**
+
 ```
 pages/index.vue          → /
 pages/about.vue          → /about
@@ -1019,6 +918,7 @@ pages/inventory/[id].vue  → /inventory/:id
 ```
 
 **How to add a new page:**
+
 1. Create `frontend/src/pages/mypage.vue`
 2. Route `/mypage` is automatically available — no router config changes needed
 
@@ -1041,6 +941,7 @@ pages/inventory/[id].vue  → /inventory/:id
 - All pages under `pages/` automatically use this layout unless they specify otherwise
 
 **To use a different layout for a page**, specify it with a route block:
+
 ```vue
 <!-- In a page file -->
 <route lang="yaml">
@@ -1048,6 +949,7 @@ meta:
   layout: custom
 </route>
 ```
+
 Then create `frontend/src/layouts/custom.vue`.
 
 ---
@@ -1080,29 +982,32 @@ const isVisible = ref(false);
 ```
 
 The `openUi` function toggles visibility and navigates to the correct route:
+
 ```js
 const openUi = async (view = "") => {
-  let targetPath = '/';
+  let targetPath = "/";
   switch (view) {
     case "yourView":
-      targetPath = '/yourview';
+      targetPath = "/yourview";
       break;
     default:
-      targetPath = '/';
+      targetPath = "/";
   }
   await router.push(targetPath);
-  isVisible.value = !isVisible.value;  // always TOGGLES, never sets
+  isVisible.value = !isVisible.value; // always TOGGLES, never sets
 };
 ```
 
 **Critical behavioral fact — `isVisible` always toggles, it is never set to a specific boolean.** `SetDisplay(true)` in Lua sends `action = 'openUi'`, and `SetDisplay(false)` also sends `action = 'openUi'`. Both trigger the same `openUi()` handler in Vue, which always does `!isVisible.value`. There is no "force show" or "force hide" signal from Lua to Vue.
 
 This means:
+
 - If `SetDisplay(true)` is called when the UI is already visible, `isVisible` becomes `false` (UI hides). This is a desync bug.
 - The safe Lua pattern is the one in `client.lua`: `SetDisplay(not display)` — always pass the opposite of the current state, tracking state in the `display` variable.
 - Never call `SetDisplay(true)` unconditionally without first checking `display == false`.
 
 **To add a new routable view**, add a case to this switch:
+
 ```js
 case "inventory":
   targetPath = '/inventory';
@@ -1123,18 +1028,20 @@ const handlers = {
 ```
 
 **To add a new NUI message handler:**
+
 ```js
 const handlers = {
   // ... existing handlers ...
   myNewAction: (itemData) => {
     // itemData is the full message object { action: "myNewAction", data: ... }
-    console.log("Received:", itemData.data)
-    store.setValue("myKey", itemData.data)
+    console.log("Received:", itemData.data);
+    store.setValue("myKey", itemData.data);
   },
 };
 ```
 
 Then from Lua client:
+
 ```lua
 SendNUIMessage({ action = "myNewAction", data = "hello" })
 ```
@@ -1174,9 +1081,10 @@ Escape sends a `closeUi` NUI callback to Lua, which calls `SetDisplay(false)`.
 #### Pinia Instance
 
 **File:** `frontend/src/stores/index.ts`
+
 ```ts
-import { createPinia } from 'pinia'
-export default createPinia()
+import { createPinia } from "pinia";
+export default createPinia();
 ```
 
 One Pinia instance, registered in `plugins/index.ts`.
@@ -1188,11 +1096,11 @@ One Pinia instance, registered in `plugins/index.ts`.
 **File:** `frontend/src/stores/app.ts`
 
 ```ts
-export const useAppStore = defineStore('app', {
+export const useAppStore = defineStore("app", {
   state: () => ({
     //
   }),
-})
+});
 ```
 
 Currently empty. Provided as a starting point for app-level state that doesn't fit other stores. **Safe to add state here.**
@@ -1204,28 +1112,34 @@ Currently empty. Provided as a starting point for app-level state that doesn't f
 **File:** `frontend/src/stores/useGlobalStore.js`
 
 ```js
-export const useGlobalStore = defineStore('global', () => {
-  const data = ref({})
+export const useGlobalStore = defineStore("global", () => {
+  const data = ref({});
 
-  function setValue(key, value) { data.value[key] = value }
-  function getValue(key) { return data.value[key] }
+  function setValue(key, value) {
+    data.value[key] = value;
+  }
+  function getValue(key) {
+    return data.value[key];
+  }
 
-  return { data, setValue, getValue }
-})
+  return { data, setValue, getValue };
+});
 ```
 
 **Usage:**
+
 ```js
-const store = useGlobalStore()
-store.setValue("header", "New Header Text")
-const header = store.getValue("header")  // "New Header Text"
+const store = useGlobalStore();
+store.setValue("header", "New Header Text");
+const header = store.getValue("header"); // "New Header Text"
 ```
 
 Used in `HelloWorld.vue` for the header display and status. Any NUI message can write arbitrary key-value pairs here.
 
 **In templates:**
+
 ```vue
-{{ store.getValue('header') || 'Fallback text' }}
+{{ store.getValue("header") || "Fallback text" }}
 ```
 
 ---
@@ -1265,15 +1179,17 @@ export const useLangStore = defineStore('lang', {
 ```
 
 **The `t` getter** works exactly like Lua `string.format` with `%s`/`%d` placeholders:
+
 ```js
 // In Lua: welcome = "Welcome! Opened on %s, language: %s."
-lang.t('welcome', formattedDate, lang.locale)
+lang.t("welcome", formattedDate, lang.locale);
 // → "Welcome! Opened on 01/04/26, language: en-US."
 ```
 
 **Nested key access** uses dot notation:
+
 ```js
-lang.t('section.nested_key')  // reads table.section.nested_key
+lang.t("section.nested_key"); // reads table.section.nested_key
 ```
 
 **Missing key fallback:** If a key is not in `state.table`, the getter returns the key string itself (`?? key`). For example, `lang.t('nonexistent_key')` returns `"nonexistent_key"`, not an error. This differs from Lua `_L()` which returns `"Localisation missing ! Key:nonexistent_key"`. There is no console warning.
@@ -1287,9 +1203,10 @@ lang.t('section.nested_key')  // reads table.section.nested_key
 **Important sequence requirement:** `sendLanguageToApp()` must be called **before** `SetDisplay(true)`. The `openview` command does this correctly. If you call `SetDisplay(true)` without first calling `sendLanguageToApp()`, the UI opens with an empty translation table and all text shows as key names.
 
 **Usage in Vue components:**
+
 ```js
-import { useLangStore } from '@/stores/langStore'
-const lang = useLangStore()
+import { useLangStore } from "@/stores/langStore";
+const lang = useLangStore();
 // In template: {{ lang.t('my_key') }}
 // In script:   lang.t('my_key', arg1, arg2)
 ```
@@ -1332,22 +1249,23 @@ export const useSnackbarStore = defineStore('snackbar', {
 
 ```js
 // String shorthand (defaults: color=success, timeout=4000):
-snackbar.showSnackbar("Operation complete!")
+snackbar.showSnackbar("Operation complete!");
 
 // Object with full control:
 snackbar.showSnackbar({
   text: "Custom message",
-  color: "secondary",   // any Vuetify color or theme color
-  timeout: 2000
-})
+  color: "secondary", // any Vuetify color or theme color
+  timeout: 2000,
+});
 ```
 
 **Shorthand methods:**
+
 ```js
-snackbar.success("Saved!", 3000)
-snackbar.error("Failed!", 5000)
-snackbar.warning("Check this")
-snackbar.info("FYI")
+snackbar.success("Saved!", 3000);
+snackbar.error("Failed!", 5000);
+snackbar.warning("Check this");
+snackbar.info("FYI");
 ```
 
 **Queue behavior:** Messages are processed sequentially. After one closes, there is a mandatory **500ms delay** before the next message displays. This gap exists for the slide-out animation. Multiple calls build a queue automatically.
@@ -1364,21 +1282,28 @@ snackbar.info("FYI")
 
 ```vue
 <template>
-    <v-snackbar v-model="store.show" :color="store.color" :timeout="-1" location="top center" rounded="pill">
-        {{ store.text }}
-        <template v-slot:actions>
-            <v-btn variant="plain" @click="store.close()" icon="$close" />
-        </template>
-    </v-snackbar>
+  <v-snackbar
+    v-model="store.show"
+    :color="store.color"
+    :timeout="-1"
+    location="top center"
+    rounded="pill"
+  >
+    {{ store.text }}
+    <template v-slot:actions>
+      <v-btn variant="plain" @click="store.close()" icon="$close" />
+    </template>
+  </v-snackbar>
 </template>
 
 <script setup>
-import { useSnackbarStore } from '@/stores/snackbar';
+import { useSnackbarStore } from "@/stores/snackbar";
 const store = useSnackbarStore();
 </script>
 ```
 
 **Key details:**
+
 - `:timeout="-1"` — Vuetify's own timeout is disabled; the store's `activeTimeout` manages dismissal
 - `location="top center"` — appears at the top-center of the screen
 - `rounded="pill"` — pill shape styling
@@ -1399,12 +1324,12 @@ This is the sole utility for sending data from Vue to Lua.
 export async function postNUI(eventName, data = {}) {
   const resourceName = window.GetParentResourceName
     ? window.GetParentResourceName()
-    : 'your_resource_name';
+    : "your_resource_name";
 
   try {
     const response = await fetch(`https://${resourceName}/${eventName}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
       body: JSON.stringify(data),
     });
     return await response.json();
@@ -1420,17 +1345,18 @@ export async function postNUI(eventName, data = {}) {
 - Returns parsed JSON response or `null` on error
 
 **Example — trigger Lua `closeUi` callback:**
+
 ```js
-await postNUI('closeUi')
+await postNUI("closeUi");
 ```
 
 #### `triggerServerAction(action, payload)` — Fire-and-Forget to Server
 
 ```js
 export async function triggerServerAction(action, payload = {}) {
-  return await postNUI('ServerRouter', {
+  return await postNUI("ServerRouter", {
     action: action,
-    data: payload
+    data: payload,
   });
 }
 ```
@@ -1439,16 +1365,16 @@ Wraps `postNUI` targeting `ServerRouter`. On the Lua side, this triggers the cor
 
 ```js
 // Example usage:
-await triggerServerAction('savePlayerData', { name: 'John', level: 5 })
+await triggerServerAction("savePlayerData", { name: "John", level: 5 });
 ```
 
 #### `requestServerData(action, payload)` — Callback with Response
 
 ```js
 export async function requestServerData(action, payload = {}) {
-  const result = await postNUI('ServerCallbackRouter', {
+  const result = await postNUI("ServerCallbackRouter", {
     action: action,
-    data: payload
+    data: payload,
   });
   return result;
 }
@@ -1458,8 +1384,8 @@ Wraps `postNUI` targeting `ServerCallbackRouter`. Waits for server to respond vi
 
 ```js
 // Example usage:
-const inventory = await requestServerData('getInventory', { playerId: 1 })
-console.log(inventory.items)
+const inventory = await requestServerData("getInventory", { playerId: 1 });
+console.log(inventory.items);
 ```
 
 ---
@@ -1496,10 +1422,11 @@ const your_theme = {
     "my-grey": "#4c4c4c",
   },
   // ... variables for opacity, border, etc.
-}
+};
 ```
 
 The theme name `"your_theme"` is referenced in `App.vue`:
+
 ```vue
 <v-app theme="your_theme">
 ```
@@ -1507,6 +1434,7 @@ The theme name `"your_theme"` is referenced in `App.vue`:
 **To rename the theme**, change the const name, the `themes` key in `createVuetify`, and the `theme=` attribute in `App.vue` — all three must match.
 
 **To add a new theme color:**
+
 ```ts
 colors: {
   // ... existing colors ...
@@ -1541,12 +1469,13 @@ Icons use SVG paths from `@mdi/js` — not the full icon font CSS. This keeps bu
 import { mdiDeleteForever, mdiMapMarker } from "@mdi/js";
 
 export const customIcons: Record<string, string> = {
-  marker: mdiMapMarker,       // use as icon="$marker"
+  marker: mdiMapMarker, // use as icon="$marker"
   trashcan: mdiDeleteForever, // use as icon="$trashcan"
 };
 ```
 
 **To add a new icon:**
+
 1. Find icon name at `pictogrammers.com/library/mdi/`
 2. Import from `@mdi/js`: `import { mdiNewIconName } from "@mdi/js"`
 3. Add to `customIcons`: `myAlias: mdiNewIconName`
@@ -1569,17 +1498,19 @@ export const customIcons: Record<string, string> = {
 ```
 
 This file is loaded by `vite.config.mts` as Vuetify's style config file:
+
 ```ts
 Vuetify({
-  styles: { configFile: 'src/styles/settings.scss' },
-})
+  styles: { configFile: "src/styles/settings.scss" },
+});
 ```
 
 **To override Vuetify SASS variables:**
+
 ```scss
-@use 'vuetify/settings' with (
+@use "vuetify/settings" with (
   $border-radius-root: 8px,
-  $color-pack: false,
+  $color-pack: false
 );
 ```
 
@@ -1594,14 +1525,15 @@ The project uses `unplugin-auto-import` configured in `vite.config.mts`:
 ```ts
 AutoImport({
   imports: [
-    'vue',                   // ref, computed, onMounted, etc. — no import needed
-    VueRouterAutoImports,    // useRouter, useRoute — no import needed
-    { pinia: ['defineStore', 'storeToRefs'] }
+    "vue", // ref, computed, onMounted, etc. — no import needed
+    VueRouterAutoImports, // useRouter, useRoute — no import needed
+    { pinia: ["defineStore", "storeToRefs"] },
   ],
-})
+});
 ```
 
 This means in `.vue` files and stores you **do not need to import**:
+
 - `ref`, `computed`, `watch`, `onMounted`, `onUnmounted`
 - `useRouter`, `useRoute`
 - `defineStore`, `storeToRefs`
@@ -1730,6 +1662,7 @@ UserNotification("Action done!", "info", 3000)
 ```
 
 Example:
+
 ```
 [my_resource] @my_resource/server/server.lua:12 (EventLogic[myEventName]) Player 5 triggered action
 ```
@@ -1746,6 +1679,7 @@ ErrorPrint("Always prints, in red")           -- unconditional, only in root deb
 ### nuiRouter.lua Debug Points
 
 The router automatically debug-prints:
+
 - `[Router] Executing Event: {key}` before calling EventLogic
 - The `data` passed to the event via `JsonPrint(data)`
 - `[Router] Returning callback data for: {key}` after CallbackLogic
@@ -1759,10 +1693,10 @@ The router automatically debug-prints:
 
 **Pattern:** `{resourceName}:{descriptiveName}`
 
-| Event | Direction | Actual Name |
-|-------|-----------|-------------|
-| Server Router | Client→Server | `{resourceName}:serverRouter` |
-| Snackbar | Server→Client | `{resourceName}:SendUserMessage` |
+| Event         | Direction     | Actual Name                      |
+| ------------- | ------------- | -------------------------------- |
+| Server Router | Client→Server | `{resourceName}:serverRouter`    |
+| Snackbar      | Server→Client | `{resourceName}:SendUserMessage` |
 
 All dynamic names use `GetCurrentResourceName()` or `tostring(GetCurrentResourceName())`.
 
@@ -1775,23 +1709,23 @@ local eventName = tostring(GetCurrentResourceName()) .. ":myEvent"
 
 **Pattern:** `PascalCase` or `camelCase` single word describing the action
 
-| Callback | Purpose |
-|----------|---------|
-| `closeUi` | Close the UI |
-| `ServerRouter` | Route fire-and-forget events to server |
-| `ServerCallbackRouter` | Route callback events to server |
-| `setHeadder` | Request a new random header (typo intentional in source) |
+| Callback               | Purpose                                                  |
+| ---------------------- | -------------------------------------------------------- |
+| `closeUi`              | Close the UI                                             |
+| `ServerRouter`         | Route fire-and-forget events to server                   |
+| `ServerCallbackRouter` | Route callback events to server                          |
+| `setHeadder`           | Request a new random header (typo intentional in source) |
 
 ### Frontend `handlers` Keys / `action` Field Names
 
 **Pattern:** `camelCase` action names in the `handlers` object in `App.vue`
 
-| Action | Triggered By | Handler |
-|--------|-------------|---------|
-| `openUi` | Lua `SetDisplay()` | Toggle visibility, route navigation |
-| `UserMessage` | Lua `UserNotification()` | Show snackbar |
-| `setLang` | Lua `sendLanguageToApp()` | Set lang store data |
-| `setHeader` | Lua `SendHeaderToApp()` | Store header in global store |
+| Action        | Triggered By              | Handler                             |
+| ------------- | ------------------------- | ----------------------------------- |
+| `openUi`      | Lua `SetDisplay()`        | Toggle visibility, route navigation |
+| `UserMessage` | Lua `UserNotification()`  | Show snackbar                       |
+| `setLang`     | Lua `sendLanguageToApp()` | Set lang store data                 |
+| `setHeader`   | Lua `SendHeaderToApp()`   | Store header in global store        |
 
 ### Naming Templates
 
@@ -1826,6 +1760,7 @@ await postNUI('myCallbackName', data)
 ### Create New UI Page
 
 **Step 1:** Create the Vue page file:
+
 ```
 frontend/src/pages/inventory.vue
 ```
@@ -1833,23 +1768,24 @@ frontend/src/pages/inventory.vue
 ```vue
 <template>
   <v-container>
-    <h1>{{ lang.t('inventory_title') }}</h1>
+    <h1>{{ lang.t("inventory_title") }}</h1>
     <!-- your content -->
   </v-container>
 </template>
 
 <script setup>
-import { useLangStore } from '@/stores/langStore'
-import { useGlobalStore } from '@/stores/useGlobalStore'
+import { useLangStore } from "@/stores/langStore";
+import { useGlobalStore } from "@/stores/useGlobalStore";
 
-const lang = useLangStore()
-const store = useGlobalStore()
+const lang = useLangStore();
+const store = useGlobalStore();
 </script>
 ```
 
 The route `/inventory` is **automatically created** by `unplugin-vue-router`. No router config changes needed.
 
 **Step 2:** Add route to `App.vue` `openUi` switch if you want Lua to open it directly:
+
 ```js
 case "inventory":
   targetPath = '/inventory';
@@ -1857,6 +1793,7 @@ case "inventory":
 ```
 
 **Step 3:** Call from Lua to open on that view:
+
 ```lua
 SetDisplay(true, "inventory")
 -- Sends: SendNUIMessage { action = 'openUi', payload = { "inventory" } }
@@ -1869,6 +1806,7 @@ SetDisplay(true, "inventory")
 ### Add New NUI Action (UI → Lua, no server needed)
 
 **Step 1:** Add the Lua callback in `client/client.lua`:
+
 ```lua
 RegisterNUICallback('myNewAction', function(data, cb)
     Print("Received myNewAction with: " .. json.encode(data))
@@ -1878,11 +1816,12 @@ end)
 ```
 
 **Step 2:** Call from Vue using `postNUI`:
-```js
-import { postNUI } from '@/utils/nui'
 
-const result = await postNUI('myNewAction', { myParam: 'value' })
-console.log(result) // { success: true, result: "done" }
+```js
+import { postNUI } from "@/utils/nui";
+
+const result = await postNUI("myNewAction", { myParam: "value" });
+console.log(result); // { success: true, result: "done" }
 ```
 
 ---
@@ -1890,6 +1829,7 @@ console.log(result) // { success: true, result: "done" }
 ### Add New Server Event (fire-and-forget from UI)
 
 **Step 1:** Add to allowlist in `server/nuiRouter.lua`:
+
 ```lua
 local AllowedFunctions = {
     ["myEventName"] = true,
@@ -1898,6 +1838,7 @@ local AllowedFunctions = {
 ```
 
 **Step 2:** Add handler in `server/server.lua` using the `EventLogic` table (NOT `RegisterNetEvent`):
+
 ```lua
 EventLogic["saveData"] = function(src, data)
     Print("saveData called by " .. tostring(src))
@@ -1912,10 +1853,11 @@ end
 ```
 
 **Step 3:** Call from Vue using `triggerServerAction` (not raw `postNUI` with `event:` field — that is Bug 3):
-```js
-import { triggerServerAction } from '@/utils/nui'
 
-await triggerServerAction('saveData', { name: 'John' })
+```js
+import { triggerServerAction } from "@/utils/nui";
+
+await triggerServerAction("saveData", { name: "John" });
 // Returns { success: true } immediately (fire-and-forget from the client perspective)
 ```
 
@@ -1924,6 +1866,7 @@ await triggerServerAction('saveData', { name: 'John' })
 ### Add New Server Callback (UI requests data from server)
 
 **Step 1:** Add to allowlist:
+
 ```lua
 local AllowedFunctions = {
     ["getPlayerStats"] = true,
@@ -1931,6 +1874,7 @@ local AllowedFunctions = {
 ```
 
 **Step 2:** Add handler returning data:
+
 ```lua
 CallbackLogic["getPlayerStats"] = function(src, data)
     -- fetch data
@@ -1943,12 +1887,13 @@ end
 ```
 
 **Step 3:** Call from Vue and use result:
-```js
-import { requestServerData } from '@/utils/nui'
 
-const response = await requestServerData('getPlayerStats')
+```js
+import { requestServerData } from "@/utils/nui";
+
+const response = await requestServerData("getPlayerStats");
 if (response?.success) {
-  console.log(response.stats.health)
+  console.log(response.stats.health);
 }
 ```
 
@@ -1957,6 +1902,7 @@ if (response?.success) {
 ### Show Notification
 
 **From Server Lua:**
+
 ```lua
 UserNotification("Operation successful!", "success", 4000, source)
 UserNotification("Something failed!", "error", 5000, source)
@@ -1965,21 +1911,23 @@ UserNotification("Be careful", "warning", 4000, source)
 ```
 
 **From Client Lua:**
+
 ```lua
 UserNotification("Client message", "info", 3000)
 -- No source argument = fires on the local client
 ```
 
 **From Vue (no Lua roundtrip):**
-```js
-import { useSnackbarStore } from '@/stores/snackbar'
-const snackbar = useSnackbarStore()
 
-snackbar.success("Saved!")
-snackbar.error("Failed!", 5000)
-snackbar.info("FYI", 3000)
-snackbar.warning("Watch out")
-snackbar.showSnackbar({ text: "Custom", color: "secondary", timeout: 2000 })
+```js
+import { useSnackbarStore } from "@/stores/snackbar";
+const snackbar = useSnackbarStore();
+
+snackbar.success("Saved!");
+snackbar.error("Failed!", 5000);
+snackbar.info("FYI", 3000);
+snackbar.warning("Watch out");
+snackbar.showSnackbar({ text: "Custom", color: "secondary", timeout: 2000 });
 ```
 
 ---
@@ -1987,6 +1935,7 @@ snackbar.showSnackbar({ text: "Custom", color: "secondary", timeout: 2000 })
 ### Add Translation
 
 **Step 1:** Add key to `lang/en.lua`:
+
 ```lua
 L = {
     -- existing...
@@ -1997,6 +1946,7 @@ L = {
 ```
 
 **Step 2:** Add same key to `lang/de.lua`:
+
 ```lua
 DE = {
     -- existing...
@@ -2007,16 +1957,18 @@ DE = {
 ```
 
 **Step 3 — Use in Lua:**
+
 ```lua
 local title = _L("inventory_title")
 local msg = string.format(_L("inventory_item_count"), 5)
 ```
 
 **Step 4 — Use in Vue (after `sendLanguageToApp()` has been called):**
+
 ```js
-lang.t('inventory_title')                       // "Player Inventory"
-lang.t('inventory_item_count', itemCount)        // "You have 5 items."
-lang.t('inventory_empty')
+lang.t("inventory_title"); // "Player Inventory"
+lang.t("inventory_item_count", itemCount); // "You have 5 items."
+lang.t("inventory_empty");
 ```
 
 The translation becomes available in Vue as soon as the UI is opened (because `sendLanguageToApp()` is called in the `openview` command handler).
@@ -2026,10 +1978,11 @@ The translation becomes available in Vue as soon as the UI is opened (because `s
 ### Add New Store
 
 **Step 1:** Create `frontend/src/stores/myStore.js`:
-```js
-import { defineStore } from 'pinia'
 
-export const useMyStore = defineStore('myStore', {
+```js
+import { defineStore } from "pinia";
+
+export const useMyStore = defineStore("myStore", {
   state: () => ({
     items: [],
     loading: false,
@@ -2041,38 +1994,41 @@ export const useMyStore = defineStore('myStore', {
 
   actions: {
     setItems(newItems) {
-      this.items = newItems
+      this.items = newItems;
     },
     addItem(item) {
-      this.items.push(item)
+      this.items.push(item);
     },
     clear() {
-      this.items = []
-    }
-  }
-})
+      this.items = [];
+    },
+  },
+});
 ```
 
 **Step 2:** No registration needed — Pinia auto-discovers stores when first imported.
 
 **Step 3:** Import and use in any component:
+
 ```js
-import { useMyStore } from '@/stores/myStore'
-const myStore = useMyStore()
-myStore.setItems([{ name: 'Bread' }])
+import { useMyStore } from "@/stores/myStore";
+const myStore = useMyStore();
+myStore.setItems([{ name: "Bread" }]);
 ```
 
 **Step 4 (optional):** To populate from Lua, add a handler in `App.vue`:
+
 ```js
 const handlers = {
   // ...
   setInventoryItems: (itemData) => {
-    myStore.setItems(itemData.data)
-  }
-}
+    myStore.setItems(itemData.data);
+  },
+};
 ```
 
 Then from Lua:
+
 ```lua
 SendNUIMessage({ action = "setInventoryItems", data = items })
 ```
@@ -2082,23 +2038,26 @@ SendNUIMessage({ action = "setInventoryItems", data = items })
 ### Add New Snackbar Message
 
 **From Vue component directly:**
+
 ```js
-snackbar.success("Item purchased!")
-snackbar.error("Insufficient funds!")
+snackbar.success("Item purchased!");
+snackbar.error("Insufficient funds!");
 ```
 
 **From Lua server (recommended for server feedback):**
+
 ```lua
 UserNotification("Transaction complete!", "success", 4000, source)
 ```
 
 **Custom snackbar with theme color:**
+
 ```js
 snackbar.showSnackbar({
   text: "Special event triggered!",
-  color: "secondary",   // uses theme's secondary color (#a00c30)
-  timeout: 6000
-})
+  color: "secondary", // uses theme's secondary color (#a00c30)
+  timeout: 6000,
+});
 ```
 
 ---
@@ -2108,27 +2067,33 @@ snackbar.showSnackbar({
 **Scenario:** User clicks "Buy Item" button in Vue; server validates and charges.
 
 **Step 1 — Vue Component Button:**
+
 ```vue
 <v-btn @click="buyItem('bread', 1)">Buy Bread</v-btn>
 ```
 
 **Step 2 — Vue Component Script:**
+
 ```js
-import { requestServerData } from '@/utils/nui'
-import { useSnackbarStore } from '@/stores/snackbar'
-const snackbar = useSnackbarStore()
+import { requestServerData } from "@/utils/nui";
+import { useSnackbarStore } from "@/stores/snackbar";
+const snackbar = useSnackbarStore();
 
 const buyItem = async (itemName, quantity) => {
-  const result = await requestServerData('buyItem', { item: itemName, qty: quantity })
+  const result = await requestServerData("buyItem", {
+    item: itemName,
+    qty: quantity,
+  });
   if (result?.success) {
-    snackbar.success(`Bought ${quantity}x ${itemName}!`)
+    snackbar.success(`Bought ${quantity}x ${itemName}!`);
   } else {
-    snackbar.error(result?.error || 'Purchase failed')
+    snackbar.error(result?.error || "Purchase failed");
   }
-}
+};
 ```
 
 **Step 3 — Server allowlist:**
+
 ```lua
 local AllowedFunctions = {
     ["buyItem"] = true,
@@ -2136,6 +2101,7 @@ local AllowedFunctions = {
 ```
 
 **Step 4 — Server logic:**
+
 ```lua
 CallbackLogic["buyItem"] = function(src, data)
     if not data.item or not data.qty then
@@ -2211,28 +2177,28 @@ Output goes to `frontend/dist/`. This is what the resource serves via `ui_page`.
 
 ### Where to Add New Files
 
-| Purpose | Location |
-|---------|---------|
-| New Vue page | `frontend/src/pages/` |
-| New Vue component | `frontend/src/components/` |
-| New Pinia store | `frontend/src/stores/` |
-| New client Lua feature | `client/` (new .lua file) |
-| New server Lua feature | `server/` (new .lua file) |
-| New shared utility | `shared/` or `shared/utils/` |
-| New language | `lang/{code}.lua` |
-| New config values | `shared/specific_config.lua` |
+| Purpose                | Location                     |
+| ---------------------- | ---------------------------- |
+| New Vue page           | `frontend/src/pages/`        |
+| New Vue component      | `frontend/src/components/`   |
+| New Pinia store        | `frontend/src/stores/`       |
+| New client Lua feature | `client/` (new .lua file)    |
+| New server Lua feature | `server/` (new .lua file)    |
+| New shared utility     | `shared/` or `shared/utils/` |
+| New language           | `lang/{code}.lua`            |
+| New config values      | `shared/specific_config.lua` |
 
 ### Files That Must NOT Be Modified
 
-| File | Reason |
-|------|--------|
-| `initconfig.lua` | Must only contain `Config = {}` and `Config.Debug`. All other config in `shared/specific_config.lua`. |
-| `frontend/src/stores/index.ts` | Just creates Pinia instance; no changes needed. |
-| `frontend/src/plugins/index.ts` | Plugin registration; only modify to add new plugins. |
-| `frontend/src/router/index.ts` | Routes are auto-generated; do not manually add routes here. |
-| `shared/utils/debugSystem.lua` | Debug utilities; extend don't replace. |
-| `shared/utils/userNotification.lua` | Notification system; extend don't replace. |
-| `shared/utils/translation.lua` | Translation resolver; extend don't replace. |
+| File                                | Reason                                                                                                |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `initconfig.lua`                    | Must only contain `Config = {}` and `Config.Debug`. All other config in `shared/specific_config.lua`. |
+| `frontend/src/stores/index.ts`      | Just creates Pinia instance; no changes needed.                                                       |
+| `frontend/src/plugins/index.ts`     | Plugin registration; only modify to add new plugins.                                                  |
+| `frontend/src/router/index.ts`      | Routes are auto-generated; do not manually add routes here.                                           |
+| `shared/utils/debugSystem.lua`      | Debug utilities; extend don't replace.                                                                |
+| `shared/utils/userNotification.lua` | Notification system; extend don't replace.                                                            |
+| `shared/utils/translation.lua`      | Translation resolver; extend don't replace.                                                           |
 
 ### Naming Rules to Follow
 
@@ -2305,6 +2271,7 @@ This example implements a full inventory panel where the player can view their i
 #### Step 1 — Translation Keys
 
 **`lang/en.lua`** — add to the `L = { ... }` table:
+
 ```lua
 inventory_title = "My Inventory",
 inventory_empty = "Your inventory is empty.",
@@ -2315,6 +2282,7 @@ inventory_fetch_error = "Failed to load inventory.",
 ```
 
 **`lang/de.lua`** — add to the `DE = { ... }` table:
+
 ```lua
 inventory_title = "Mein Inventar",
 inventory_empty = "Dein Inventar ist leer.",
@@ -2329,10 +2297,11 @@ inventory_fetch_error = "Inventar konnte nicht geladen werden.",
 #### Step 2 — Pinia Store
 
 **`frontend/src/stores/inventoryStore.js`**:
-```js
-import { defineStore } from 'pinia'
 
-export const useInventoryStore = defineStore('inventory', {
+```js
+import { defineStore } from "pinia";
+
+export const useInventoryStore = defineStore("inventory", {
   state: () => ({
     items: [],
     loading: false,
@@ -2346,24 +2315,24 @@ export const useInventoryStore = defineStore('inventory', {
 
   actions: {
     setItems(items) {
-      this.items = items || []
+      this.items = items || [];
     },
     removeItem(itemId) {
-      this.items = this.items.filter(i => i.id !== itemId)
+      this.items = this.items.filter((i) => i.id !== itemId);
     },
     setLoading(val) {
-      this.loading = val
+      this.loading = val;
     },
     setError(msg) {
-      this.error = msg
+      this.error = msg;
     },
     clear() {
-      this.items = []
-      this.loading = false
-      this.error = null
-    }
-  }
-})
+      this.items = [];
+      this.loading = false;
+      this.error = null;
+    },
+  },
+});
 ```
 
 ---
@@ -2371,16 +2340,21 @@ export const useInventoryStore = defineStore('inventory', {
 #### Step 3 — Vue Page
 
 **`frontend/src/pages/inventory.vue`**:
+
 ```vue
 <template>
   <v-container class="fill-height" max-width="800">
     <div class="w-100">
-      <h1 class="text-h4 mb-4 text-primary">{{ lang.t('inventory_title') }}</h1>
+      <h1 class="text-h4 mb-4 text-primary">{{ lang.t("inventory_title") }}</h1>
 
-      <v-progress-circular v-if="inventory.loading" indeterminate color="primary" />
+      <v-progress-circular
+        v-if="inventory.loading"
+        indeterminate
+        color="primary"
+      />
 
       <v-alert v-else-if="inventory.isEmpty" type="info">
-        {{ lang.t('inventory_empty') }}
+        {{ lang.t("inventory_empty") }}
       </v-alert>
 
       <v-row v-else>
@@ -2395,7 +2369,7 @@ export const useInventoryStore = defineStore('inventory', {
                 size="small"
                 @click="dropItem(item.id)"
               >
-                {{ lang.t('inventory_drop_btn') }}
+                {{ lang.t("inventory_drop_btn") }}
               </v-btn>
             </v-card-actions>
           </v-card>
@@ -2406,37 +2380,37 @@ export const useInventoryStore = defineStore('inventory', {
 </template>
 
 <script setup>
-import { useLangStore } from '@/stores/langStore'
-import { useInventoryStore } from '@/stores/inventoryStore'
-import { useSnackbarStore } from '@/stores/snackbar'
-import { requestServerData, triggerServerAction } from '@/utils/nui'
+import { useLangStore } from "@/stores/langStore";
+import { useInventoryStore } from "@/stores/inventoryStore";
+import { useSnackbarStore } from "@/stores/snackbar";
+import { requestServerData, triggerServerAction } from "@/utils/nui";
 
-const lang = useLangStore()
-const inventory = useInventoryStore()
-const snackbar = useSnackbarStore()
+const lang = useLangStore();
+const inventory = useInventoryStore();
+const snackbar = useSnackbarStore();
 
 // Load inventory when the page mounts
 onMounted(async () => {
-  inventory.setLoading(true)
-  const result = await requestServerData('getInventory')
-  inventory.setLoading(false)
+  inventory.setLoading(true);
+  const result = await requestServerData("getInventory");
+  inventory.setLoading(false);
 
   if (result?.success) {
-    inventory.setItems(result.items)
+    inventory.setItems(result.items);
   } else {
-    snackbar.error(lang.t('inventory_fetch_error'))
+    snackbar.error(lang.t("inventory_fetch_error"));
   }
-})
+});
 
 const dropItem = async (itemId) => {
-  const result = await requestServerData('dropItem', { itemId })
+  const result = await requestServerData("dropItem", { itemId });
   if (result?.success) {
-    inventory.removeItem(itemId)
-    snackbar.success(lang.t('inventory_drop_success'))
+    inventory.removeItem(itemId);
+    snackbar.success(lang.t("inventory_drop_success"));
   } else {
-    snackbar.error(lang.t('inventory_drop_error'))
+    snackbar.error(lang.t("inventory_drop_error"));
   }
-}
+};
 </script>
 ```
 
@@ -2447,6 +2421,7 @@ The route `/inventory` is auto-created. No router changes needed.
 #### Step 4 — App.vue: Add Route Case
 
 In `App.vue`, add to the `openUi` switch:
+
 ```js
 case "inventory":
   targetPath = '/inventory';
@@ -2458,6 +2433,7 @@ case "inventory":
 #### Step 5 — Server Allowlist
 
 In `server/nuiRouter.lua`, add to `AllowedFunctions`:
+
 ```lua
 local AllowedFunctions = {
     ["myEventName"] = true,
@@ -2472,6 +2448,7 @@ local AllowedFunctions = {
 #### Step 6 — Server Logic
 
 In `server/server.lua`, add:
+
 ```lua
 -- Mock inventory data (replace with real database calls)
 local playerInventories = {}
@@ -2515,6 +2492,7 @@ end
 #### Step 7 — Open Inventory from Lua
 
 In `client/client.lua`, optionally add a command or keybind:
+
 ```lua
 RegisterCommand("inventory", function()
     sendLanguageToApp()
@@ -2523,6 +2501,7 @@ end, false)
 ```
 
 Or trigger from server event:
+
 ```lua
 -- From server, tell client to open inventory:
 TriggerClientEvent(GetCurrentResourceName() .. ":openInventory", source)
@@ -2557,6 +2536,7 @@ server_scripts {
 Before this feature can work end-to-end, apply these fixes to the boilerplate:
 
 **Fix Bug 1 (JsonPrint undefined):** Add to `shared/debugSystem.lua`:
+
 ```lua
 function JsonPrint(data)
     DebugPrint(json.encode(data))
@@ -2601,4 +2581,4 @@ Player clicks "Drop" on item with id=2
 
 ---
 
-*This documentation was generated from actual source code inspection. All code examples reflect real patterns found in the repository.*
+_This documentation was generated from actual source code inspection. All code examples reflect real patterns found in the repository._

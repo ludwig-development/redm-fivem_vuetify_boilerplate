@@ -80,7 +80,7 @@ lib.callback.register(callbackRouterName, function(source, action, data)
     end
 
     if not isAllowed(key) then
-        WarnPrint("[Router] Blocked unauthorized callback: " .. key .. " Triggering Player: " .. GetPlayerName(src))
+        WarnPrint("[Router] Blocked unauthorized callback: " .. key .. " Triggering Player: " .. GetPlayerName(source))
         UserNotification("Triggered not allowed callback", "error", 4000, source)
         return { success = false, error = "Not Allowed" }
     end
