@@ -26,8 +26,7 @@ ui_page {
 }
 
 files {
-    "frontend/dist/index.html",
-    "frontend/dist/assets/**",
+    "frontend/dist/**"
 }
 
 github_link "https://github.com/ludwig-development/redm-fivem_vuetify_boilerplate"
