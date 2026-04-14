@@ -1,5 +1,5 @@
 <template>
-  <v-app theme="your_theme">
+  <v-app theme="your_theme" class="bg-transparent">
     <!--move the  v-show="isVisible" here if you dont want the snackbar to display AFTER the UI already closed -->
     <Snackbar />
 
@@ -58,6 +58,9 @@ const handlers = {
       console.log("setting Data, step2");
       lang.setLangData(itemData)
     }
+  },
+  initConfig: (itemData) => {
+    store.setConfig(itemData.config)
   },
   // your specific functions: 
   setHeader: (itemData) => {
