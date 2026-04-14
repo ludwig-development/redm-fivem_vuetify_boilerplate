@@ -63,7 +63,7 @@ The UI never talks directly to the server. **All UI → Server communication goe
 | Lua Server        | Standard FiveM/RedM Lua                    | `server/`                                      |
 | Shared Logic      | Loaded on both client and server           | `shared/`                                      |
 | Translation       | Lua `L` table → Vue `langStore`            | `lang/` + `stores/langStore.js`                |
-| Notifications     | `UserNotification()` → NUI snackbar        | `shared/userNotification.lua` + `Snackbar.vue` |
+| Notifications     | `UserNotification()` → custom notification cards | `shared/userNotification.lua` + `Snackbar.vue` + `utils/useNotify.js` |
 | Debug             | `DebugPrint()` / `Print()` / `WarnPrint()` | `shared/debugSystem.lua`                       |
 | Dependency        | ox_lib (for `lib.callback`)                | External                                       |
 
@@ -146,9 +146,9 @@ dependency 'ox_lib'
 
 1. **`initconfig.lua` must be the very first shared script.** It initializes `Config = {}` before any other shared script tries to write to it. If loaded out of order, `specific_config.lua` will crash trying to assign to a nil table.
 
-2. **`shared/utils/*.lua` before `shared/*.lua`** — utility functions (`DebugPrint`, `UserNotification`, `_L`) must exist before `specific_config.lua` uses them.
+2. **`shared/utils/*.lua` before `shared/*.lua`** — utility functions (`DebugPrint`, `UserNotification`, `T`) must exist before `specific_config.lua` uses them.
 
-3. **`lang/*.lua` is loaded as shared** so both client and server have access to the `L` table (used by `_L()` and sent to the frontend by the client).
+3. **`lang/*.lua` is loaded as shared** so both client and server have access to the `L` table (used by `T()` and sent to the frontend by the client).
 
 4. **Server scripts must include `@ox_lib/init.lua`** before `nuiRouter.lua`, because `nuiRouter.lua` uses `lib.callback.register(...)`.
 
@@ -389,11 +389,11 @@ end)
 
 **Data mapping:**
 
-- `message` (string) → `payload.text` → displayed as snackbar text
-- `action` (string) → `payload.color` → Vuetify color (`"success"`, `"error"`, `"info"`, `"warning"`)
+- `message` (string) → `payload.text` → displayed as the notification body
+- `action` (string) → `payload.color` → notification type (`"success"`, `"error"`, `"info"`, `"warning"`)
 - `time` (number, milliseconds) → `payload.timeout` → auto-dismiss duration
 
-The `SendNUIMessage` with `action = 'UserMessage'` is caught in `App.vue` and calls `snackbar.showSnackbar(itemData.data)`.
+The `SendNUIMessage` with `action = 'UserMessage'` is caught in `App.vue` and calls `snackbar.showSnackbar(itemData.data)`, which delegates to `useNotify().show()` to display a custom notification card.
 
 #### Trigger a Notification from Client Lua
 
@@ -668,8 +668,8 @@ end
 
 | Parameter | Type          | Description                                                                                         |
 | --------- | ------------- | --------------------------------------------------------------------------------------------------- |
-| `message` | string        | The text displayed in the snackbar                                                                  |
-| `type`    | string        | Vuetify color: `"success"`, `"error"`, `"info"`, `"warning"`                                        |
+| `message` | string        | The text displayed in the notification card body                                                    |
+| `type`    | string        | Notification type: `"success"`, `"error"`, `"info"`, `"warning"` — controls icon image and progress bar color |
 | `time`    | number        | Milliseconds before auto-dismiss (e.g., `4000`)                                                     |
 | `source`  | number or nil | Player server ID. If provided → sends to that client. If nil → fires local event (client-side only) |
 
@@ -694,7 +694,7 @@ UserNotification("Action completed!", "info", 3000, nil)
 **File:** `shared/utils/translation.lua`
 
 ```lua
-function _L(key)
+function T(key)
     return L?[key] or DE?[key] or "Localisation missing ! Key:" .. tostring(key)
 end
 ```
@@ -708,8 +708,8 @@ end
 **Usage:**
 
 ```lua
-local text = _L("welcome")         -- returns localized "Welcome!" string
-local title = _L("boilerplate_title")
+local text = T("welcome")         -- returns localized "Welcome!" string
+local title = T("boilerplate_title")
 ```
 
 Note: The `?` operator in `L?[key]` is Lua 5.4+ safe-navigation. In FiveM/RedM Lua this is supported.
@@ -758,8 +758,8 @@ end
 
 **Key differences:**
 
-- `DE` is always set (used as fallback in `_L()`)
-- If `Config.Language == "de"`, `L = DE` so `_L()` works via the primary `L` table
+- `DE` is always set (used as fallback in `T()`)
+- If `Config.Language == "de"`, `L = DE` so `T()` works via the primary `L` table
 - The `L = L or {}` guard prevents overwriting a previously set `L`
 
 ### Load Order Behavior
@@ -770,7 +770,7 @@ Both language files are in `shared_scripts` (loaded by both client and server). 
 - `en.lua` only sets `L = {...}` when `Config.Language == "en"`, otherwise returns early.
 - If `de.lua` runs before `en.lua` with language "en": `de.lua` sets `DE`, leaves `L` as `{}` (guard), `en.lua` then overwrites `L` with English. Correct.
 - If `en.lua` runs before `de.lua` with language "en": `en.lua` sets `L` to English table, `de.lua` sees `L = L or {}` (L is already truthy), keeps `L` as English, sets `DE`. Correct.
-- `DE` is **always populated** regardless of language setting. It serves as the fallback in `_L()`. This means the German string table is always in memory even when using English.
+- `DE` is **always populated** regardless of language setting. It serves as the fallback in `T()`. This means the German string table is always in memory even when using English.
 - After both files load: `L` is the active language table, `DE` is always the German table.
 
 ### Key Naming Rules
@@ -837,7 +837,7 @@ DE = {
 }
 ```
 
-**Step 3 (optional):** Use in Lua with `_L("my_new_key")`.
+**Step 3 (optional):** Use in Lua with `T("my_new_key")`.
 
 **Step 4:** The key is automatically available in Vue after `sendLanguageToApp()` is called, via `lang.t('my_new_key')`.
 
@@ -1192,7 +1192,7 @@ lang.t("welcome", formattedDate, lang.locale);
 lang.t("section.nested_key"); // reads table.section.nested_key
 ```
 
-**Missing key fallback:** If a key is not in `state.table`, the getter returns the key string itself (`?? key`). For example, `lang.t('nonexistent_key')` returns `"nonexistent_key"`, not an error. This differs from Lua `_L()` which returns `"Localisation missing ! Key:nonexistent_key"`. There is no console warning.
+**Missing key fallback:** If a key is not in `state.table`, the getter returns the key string itself (`?? key`). For example, `lang.t('nonexistent_key')` returns `"nonexistent_key"`, not an error. This differs from Lua `T()` which returns `"Localisation missing ! Key:nonexistent_key"`. There is no console warning.
 
 **Before `setLangData` is called (empty table):** The default `state.table = {}` means all `lang.t('key')` calls return the key name itself. If the UI is somehow rendered before `sendLanguageToApp()` runs, all text will display as raw key names.
 
@@ -1213,30 +1213,16 @@ const lang = useLangStore();
 
 ---
 
-#### snackbar.js — Notification Queue Store
+#### snackbar.js — Notification Store (Delegates to useNotify)
 
 **File:** `frontend/src/stores/snackbar.js`
 
+The store holds **no state of its own**. It is a thin API adapter that delegates every call to `useNotify()`. This preserves the existing Lua-side event contract (`text`, `color`, `timeout`) while routing all display through the custom notification card system.
+
 ```js
 export const useSnackbarStore = defineStore('snackbar', {
-  state: () => ({
-    queue: [],       // pending messages
-    current: null,   // currently displayed message
-    show: false,     // v-model for v-snackbar
-    activeTimeout: null,
-  }),
-
-  getters: {
-    text: (state) => state.current?.text || '',
-    color: (state) => state.current?.color || 'success',
-    timeout: (state) => state.current?.timeout || 4000,
-  },
-
   actions: {
-    showSnackbar(payload) { ... },  // accepts string or object
-    processQueue() { ... },          // dequeues next message
-    close() { ... },                 // closes current, processes next after 500ms
-
+    showSnackbar(payload) { ... },  // accepts string or { text, color, timeout, title, type, imagePath }
     success(message, timeout = 4000) { ... },
     error(message, timeout = 5000) { ... },
     warning(message, timeout = 4000) { ... },
@@ -1248,67 +1234,98 @@ export const useSnackbarStore = defineStore('snackbar', {
 **`showSnackbar` accepts two payload formats:**
 
 ```js
-// String shorthand (defaults: color=success, timeout=4000):
+// String shorthand (defaults: imagePath=info, time=4000, type=normal):
 snackbar.showSnackbar("Operation complete!");
 
-// Object with full control:
-snackbar.showSnackbar({
-  text: "Custom message",
-  color: "secondary", // any Vuetify color or theme color
-  timeout: 2000,
-});
+// Object — legacy fields (text, color, timeout) are fully supported:
+snackbar.showSnackbar({ text: "Custom message", color: "warning", timeout: 2000 });
+
+// Object — extended fields for direct useNotify control:
+snackbar.showSnackbar({ title: "Alert", message: "Something happened", imagePath: "warning", time: 3000, type: "multi" });
 ```
 
 **Shorthand methods:**
 
 ```js
-snackbar.success("Saved!", 3000);
-snackbar.error("Failed!", 5000);
-snackbar.warning("Check this");
-snackbar.info("FYI");
+snackbar.success("Saved!", 3000);   // success.png icon, "Success" title
+snackbar.error("Failed!", 5000);    // error.png icon, "Error" title
+snackbar.warning("Check this");     // warning.png icon, "Warning" title
+snackbar.info("FYI");               // info.png icon, "Info" title
 ```
 
-**Queue behavior:** Messages are processed sequentially. After one closes, there is a mandatory **500ms delay** before the next message displays. This gap exists for the slide-out animation. Multiple calls build a queue automatically.
+**Color → image mapping:**
 
-**Edge case — calling `showSnackbar` during the 500ms gap:** After `close()` sets `show = false`, the code waits 500ms before calling `processQueue()`. If `showSnackbar()` is called during this gap, it sees `!this.show` (true) and calls `processQueue()` immediately — which is correct and safe. When the 500ms `setTimeout` fires, `processQueue()` is called again but finds an empty queue and returns immediately. No messages are skipped or duplicated.
+| `color` value | Icon image used    |
+| ------------- | ------------------ |
+| `"success"`   | `assets/success.png` |
+| `"error"`     | `assets/error.png`   |
+| `"warning"`   | `assets/warning.png` |
+| `"info"`      | `assets/info.png`    |
 
-**The `timeout` field in `:timeout="-1"` is intentional.** Vuetify's own timeout is disabled. The store's `activeTimeout` (`setTimeout` in `processQueue`) manages dismissal. This prevents Vuetify from dismissing the snackbar before the store is ready to process the next message.
+**Queue behavior:** Up to 5 normal notifications can be visible simultaneously (oldest is evicted if the limit is exceeded). Each notification auto-dismisses after its `time` duration. There is no sequential waiting — all queued notifications are rendered at once via `transition-group`.
 
 ---
 
-### Snackbar UI System
+### Notification UI System
 
-**File:** `frontend/src/components/Snackbar.vue`
+**File:** `frontend/src/components/Snackbar.vue` (acts as the NotificationManager)
+
+`Snackbar.vue` is no longer a Vuetify `v-snackbar`. It is a full notification manager that renders all three notification types. The filename is kept as `Snackbar.vue` so `App.vue` requires no changes.
 
 ```vue
 <template>
-  <v-snackbar
-    v-model="store.show"
-    :color="store.color"
-    :timeout="-1"
-    location="top center"
-    rounded="pill"
-  >
-    {{ store.text }}
-    <template v-slot:actions>
-      <v-btn variant="plain" @click="store.close()" icon="$close" />
-    </template>
-  </v-snackbar>
-</template>
+  <div class="notification-layer">         <!-- fixed inset:0, pointer-events:none, z-index:9990 -->
 
-<script setup>
-import { useSnackbarStore } from "@/stores/snackbar";
-const store = useSnackbarStore();
-</script>
+    <transition name="fade">
+      <FullscreenNotification v-if="fullscreenActive" :notification="fullscreenActive" />
+    </transition>
+
+    <div class="multi-container">          <!-- top-center, drops in from above -->
+      <transition-group name="slide-down">
+        <MultiNotification v-for="n in multiQueue" :key="n.id" :notification="n" />
+      </transition-group>
+    </div>
+
+    <div class="normal-container">        <!-- top-right, slides in from right -->
+      <transition-group name="slide-left">
+        <NormalNotification v-for="n in normalQueue" :key="n.id" :notification="n" />
+      </transition-group>
+    </div>
+
+  </div>
+</template>
 ```
 
-**Key details:**
+**Sub-components (in `src/components/notifications/`):**
 
-- `:timeout="-1"` — Vuetify's own timeout is disabled; the store's `activeTimeout` manages dismissal
-- `location="top center"` — appears at the top-center of the screen
-- `rounded="pill"` — pill shape styling
-- Close button uses `$close` icon (from Vuetify's default aliases)
-- The component is mounted in `App.vue` **outside** `v-show="isVisible"`, so notifications persist after UI closes
+| Component | Description | Max visible | Position |
+| --------- | ----------- | ----------- | -------- |
+| `NormalNotification.vue` | 300px card with icon + title + text + progress bar | 5 | Top-right, slides from right |
+| `MultiNotification.vue` | 450px wider card, same structure | 3 | Top-center, drops from above |
+| `FullscreenNotification.vue` | Full `v-overlay` with large image + text | 1 (replaces) | Center overlay |
+
+**useNotify composable (`src/utils/useNotify.js`):**
+
+Module-level singleton — all callers share the same queues. Manages three reactive queues:
+
+```js
+const normalQueue = ref([])      // max 5 concurrent
+const multiQueue = ref([])       // max 3 concurrent
+const fullscreenActive = ref(null)  // single slot
+
+// show() payload fields:
+{
+  title: string,      // card header (default: 'Notification')
+  message: string,    // card body text
+  time: number,       // ms before auto-remove (default: 4000)
+  imagePath: string,  // 'success' | 'error' | 'warning' | 'info' or custom item name
+  type: string,       // 'normal' | 'multi' | 'fullscreen' (default: 'normal')
+}
+```
+
+**Progress bar color** is derived from the resolved image path (e.g. a path containing `"success"` → `success` Vuetify color). The progress bar CSS transition duration is bound to the notification's `Time` value.
+
+**The component is mounted in `App.vue` outside `v-show="isVisible"`**, so notifications persist even after the UI panel closes.
 
 ---
 
@@ -1579,9 +1596,11 @@ These are globally available. Only component-specific imports (stores, utils, ot
 [App.vue: window.addEventListener("message", ...) fires]
 [handlers['UserMessage'] called → snackbar.showSnackbar(itemData.data)]
          ↓
-[snackbar.js: queue.push(message), processQueue()]
+[snackbar.js: maps color→imagePath, delegates to useNotify().show()]
          ↓
-[Snackbar.vue: v-snackbar v-model="store.show" renders notification]
+[useNotify: pushes notification object into normalQueue (or multi/fullscreen)]
+         ↓
+[Snackbar.vue: transition-group renders NormalNotification card, auto-removes after Time ms]
 ```
 
 ### Complete Flow: UI Requests Data FROM Server
@@ -1959,8 +1978,8 @@ DE = {
 **Step 3 — Use in Lua:**
 
 ```lua
-local title = _L("inventory_title")
-local msg = string.format(_L("inventory_item_count"), 5)
+local title = T("inventory_title")
+local msg = string.format(T("inventory_item_count"), 5)
 ```
 
 **Step 4 — Use in Vue (after `sendLanguageToApp()` has been called):**
@@ -2236,7 +2255,7 @@ Output goes to `frontend/dist/`. This is what the resource serves via `ui_page`.
 
 6. **Always use `lang.t('key')` in Vue components** — never hardcode user-visible strings.
 
-7. **Always use `_L('key')` in Lua** — never hardcode user-visible strings in Lua either.
+7. **Always use `T('key')` in Lua** — never hardcode user-visible strings in Lua either.
 
 8. **The Snackbar component must remain outside `v-show="isVisible"`** in `App.vue` — if you move it inside, notifications sent after UI close won't display.
 

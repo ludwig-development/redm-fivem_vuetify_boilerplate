@@ -14,6 +14,19 @@ local function sendLanguageToApp()
     })
 end
 
+-- sendConfigToApp() -> sends a curated subset of Config to the frontend.
+--                   -> Only add values the UI actually needs; skip heavy tables like models/coords.
+local function sendConfigToApp()
+    SendNUIMessage({
+        action = "initConfig",
+        config = {
+            itemImagePath = Config.itemImagePath or "",
+            -- add further frontend-needed keys here, e.g.:
+            -- someFlag = Config.someFlag,
+        },
+    })
+end
+
 -- SetDisplay() -> changes the toggle state of our vue app ( isVisible = !isVisible )
 --              -> it can also be used to change the app view
 function SetDisplay(bool, view)
@@ -35,11 +48,12 @@ end)
 -- Command to open the UI ( you can make the view open on any condition of your choice )
 RegisterCommand("openview", function()
     sendLanguageToApp()
+    sendConfigToApp()
     SetDisplay(not display)
 end, false)
 
 
--- This callback is used as an example of receiving data from the app
+-- This callback is used as an example of receiving data from the app and sending something back, i personaly prefer using the CallbackRouter
 RegisterNUICallback('setHeadder', function(data)
     Print("i have received the Data: " .. json.encode(data))
 

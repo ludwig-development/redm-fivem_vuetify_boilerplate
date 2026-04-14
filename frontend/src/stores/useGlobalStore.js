@@ -12,6 +12,17 @@ export const useGlobalStore = defineStore('global', () => {
     return data.value[key]
   }
 
-  return { data, setValue, getValue }
+  // Bulk-initialize from a config object — only whitelisted keys are accepted
+  // so a misconfigured Lua table can't pollute the store with unexpected fields.
+  const CONFIG_KEYS = ['itemImagePath']
+
+  function setConfig(config) {
+    if (!config || typeof config !== 'object') return
+    for (const key of CONFIG_KEYS) {
+      if (key in config) data.value[key] = config[key]
+    }
+  }
+
+  return { data, setValue, getValue, setConfig }
 })
 
