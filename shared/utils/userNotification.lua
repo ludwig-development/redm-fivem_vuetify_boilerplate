@@ -1,9 +1,9 @@
 local notificationEvent = tostring(GetCurrentResourceName()) .. ":SendUserMessage"
 
-function UserNotification(message, type, time, source)
+function UserNotification(payload, source)
     if source then
-        TriggerClientEvent(notificationEvent, source, message, type, time)
+        TriggerClientEvent(notificationEvent, source, payload)
     else
-        TriggerEvent(notificationEvent, message, type, time)
+        TriggerEvent(notificationEvent, payload)
     end
 end

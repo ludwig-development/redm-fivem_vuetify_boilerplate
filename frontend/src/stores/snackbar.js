@@ -1,73 +1,54 @@
 import { defineStore } from 'pinia';
+import { useNotify } from '@/utils/useNotify';
 
-const snackbarColors = {
-  success: 'success',
-  error: 'error',
-  info: 'info',
-  warning: 'warning'
+const colorToImage = {
+    success: 'success',
+    error: 'error',
+    warning: 'warning',
+    info: 'info',
+};
+
+const colorToTitle = {
+    success: 'Success',
+    error: 'Error',
+    warning: 'Warning',
+    info: 'Info',
 };
 
 export const useSnackbarStore = defineStore('snackbar', {
-  state: () => ({
-    queue: [],   
-    current: null,  
-    show: false,  
-    activeTimeout: null,
-  }),
+    actions: {
+        showSnackbar(payload) {
+            const { show } = useNotify();
 
-  getters: {
-    text: (state) => state.current?.text || '',
-    color: (state) => state.current?.color || 'success',
-    timeout: (state) => state.current?.timeout || 4000,
-  },
+            if (typeof payload === 'string') {
+                show({ title: 'Info', message: payload, time: 4000, imagePath: 'info', type: 'normal' });
+                return;
+            }
 
-  actions: {
-    showSnackbar(payload) {
-      const message = typeof payload === 'string' 
-        ? { text: payload, color: 'success', timeout: 4000 }
-        : { ...payload, color: payload.color || 'success', timeout: payload.timeout || 4000 };
+            const color = payload.color || 'success';
+            show({
+                title: payload.title || payload.Title || colorToTitle[color] || 'Notification',
+                message: payload.text || payload.message || payload.Text || '',
+                time: payload.timeout || payload.time || payload.Time || 4000,
+                imagePath: payload.imagePath || colorToImage[color] || 'info',
+                type: payload.type || payload.Type || 'normal',
+            });
+        },
 
-      this.queue.push(message);
-      if (!this.show) this.processQueue();
-    },
+        success(message, timeout = 4000) {
+            this.showSnackbar({ text: message, color: 'success', timeout });
+        },
 
-    processQueue() {
-      if (this.queue.length === 0) return;
+        error(message, timeout = 5000) {
+            this.showSnackbar({ text: message, color: 'error', timeout });
+        },
 
-      this.current = this.queue.shift();
-      this.show = true;
+        warning(message, timeout = 4000) {
+            this.showSnackbar({ text: message, color: 'warning', timeout });
+        },
 
-      if (this.activeTimeout) clearTimeout(this.activeTimeout);
-
-      this.activeTimeout = setTimeout(() => {
-        this.close();
-      }, this.current.timeout);
-    },
-
-    close() {
-      this.show = false;
-      if (this.activeTimeout) clearTimeout(this.activeTimeout);
-      
-      setTimeout(() => {
-        this.processQueue();
-      }, 500); 
-    },
-  
-
-    success(message, timeout = 4000) {
-      this.showSnackbar({ text: message, color: snackbarColors.success, timeout });
-    },
-    
-    error(message, timeout = 5000) {
-      this.showSnackbar({ text: message, color: snackbarColors.error, timeout });
-    },
-
-    warning(message, timeout = 4000) {
-      this.showSnackbar({ text: message, color: snackbarColors.warning, timeout });
-    },
-
-    info(message, timeout = 4000) {
-      this.showSnackbar({ text: message, color: snackbarColors.info, timeout });
+        info(message, timeout = 4000) {
+            this.showSnackbar({ text: message, color: 'info', timeout });
+        }
     }
-  }
 });
