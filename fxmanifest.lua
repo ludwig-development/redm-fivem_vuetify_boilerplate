@@ -4,6 +4,7 @@ games { 'rdr3', 'gta5' }
 rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships.'
 
 author 'Ludwig Development'
+version '1.1.2'
 
 shared_scripts {
     '@ox_lib/init.lua',
@@ -28,3 +29,5 @@ files {
     "frontend/dist/index.html",
     "frontend/dist/assets/**",
 }
+
+github_link "https://github.com/ludwig-development/redm-fivem_vuetify_boilerplate"
