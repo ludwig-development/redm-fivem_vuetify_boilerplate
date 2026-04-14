@@ -23,7 +23,10 @@ local function validateKey(key, src)
         WarnPrint("[Router] Invalid function key received")
 
         if src then
-            UserNotification("Invalid request", "error", 4000, src)
+            UserNotification({
+                message = "Invalid function key",
+                color = "error",
+            }, src)
         end
 
         return false
@@ -46,7 +49,7 @@ AddEventHandler(eventRouterName, function(action, data)
 
     if not isAllowed(key) then
         WarnPrint("[Router] Blocked unauthorized event: " .. key .. " Triggering Player: " .. GetPlayerName(src))
-        UserNotification("Triggered not allowed event", "error", 4000, src)
+        UserNotification({ message = "Triggered not allowed event", color = "error" }, src)
         return
     end
 
@@ -54,7 +57,7 @@ AddEventHandler(eventRouterName, function(action, data)
 
     if type(logicFunction) ~= "function" then
         WarnPrint("[Router] No EventLogic found for key: " .. key)
-        UserNotification("Triggered non-existing event", "error", 4000, src)
+        UserNotification({ message = "Triggered non-existing event", color = "error" }, src)
         return
     end
 
@@ -81,7 +84,7 @@ lib.callback.register(callbackRouterName, function(source, action, data)
 
     if not isAllowed(key) then
         WarnPrint("[Router] Blocked unauthorized callback: " .. key .. " Triggering Player: " .. GetPlayerName(source))
-        UserNotification("Triggered not allowed callback", "error", 4000, source)
+        UserNotification({ message = "Triggered not allowed callback", color = "error" }, source)
         return { success = false, error = "Not Allowed" }
     end
 
@@ -89,7 +92,7 @@ lib.callback.register(callbackRouterName, function(source, action, data)
     if type(logicFunction) ~= "function" then
         WarnPrint("[Router] No CallbackLogic found for key: " .. key)
 
-        UserNotification(string.format("No Callback Logic defined for %s", key), "error", 4000, source)
+        UserNotification({ message = string.format("No Callback Logic defined for %s", key), color = "error" }, source)
 
         return { success = false, error = "Action Not Found" }
     end

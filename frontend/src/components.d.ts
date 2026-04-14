@@ -11,7 +11,10 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    FullscreenNotification: typeof import('./components/notifications/FullscreenNotification.vue')['default']
     HelloWorld: typeof import('./components/HelloWorld.vue')['default']
+    MultiNotification: typeof import('./components/notifications/MultiNotification.vue')['default']
+    NormalNotification: typeof import('./components/notifications/NormalNotification.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     Snackbar: typeof import('./components/Snackbar.vue')['default']
