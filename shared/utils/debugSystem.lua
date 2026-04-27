@@ -92,5 +92,5 @@ local function dump(o, depth)
 end
 
 function ObjectPrint(object)
-    Print(dump(object))
+    DebugPrint(4, dump(object))
 end
